@@ -7,7 +7,7 @@ BUILD_DIR := ./build
 SRC_DIRS  := ./src
 
 CC = g++
-CFLAGS = -c -Wall -O1 $(shell pkg-config --cflags opencv eigen3)
+CFLAGS = -c -Wall -O1 -Wextra -std=c++11 $(shell pkg-config --cflags opencv eigen3)
 
 LDFLAGS = -L /usr/local/lib 
 LIBS = -lpthread $(shell pkg-config --libs opencv eigen3)

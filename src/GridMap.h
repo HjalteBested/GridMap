@@ -1,4 +1,4 @@
-/**	\file astar.h
+/**	\file gridmap.h
  * \brief Implementation of the A* search Algorithm.
  *
  * \author Hjalte Bested Møller
@@ -50,7 +50,6 @@ public:
     float heightInMeters() {
         return height*cellSize;
     }
-
 };
 
 class MapNode {
@@ -81,22 +80,59 @@ public:
 class LaserScanner {
 public:
     // Vector3f pose; /// Scan Pose in world coordinates (x,y,theta);
-    float maxDistance;
-    float resolDeg;
-    float resolRad;
-    float fov;
+    float maxDistance; /// Max Distance (Laser Measurement Range) in meters.
+    float resolDeg;    /// Laser Scanner Resolution in Deg
+    float resolRad;    /// Laser Scanner Resolution in Rad
+    float fov;         /// Laser Scanner Field-of-view in Deg
 
     int nScanLines; /// Number of scanning lines (deduced from scan width and resolution)
     MatrixXf scanData;
 
     void init(){
-        // this->pose << 0,0,0;
         this->resolRad = resolDeg*M_PI/180.0;
         this->nScanLines = round(fov/resolDeg+1);
-        scanData.resize(2,nScanLines);
-        scanData.setZero();
     }
 
+    MatrixXf polarToCart(MatrixXf scanPolar){
+        int nScanLines = scanPolar.cols();
+        MatrixXf scanCart(2,nScanLines);
+        for(int i=0; i<nScanLines; i++){
+            double phi = scanPolar(0,i);
+            double rho = scanPolar(1,i);
+            double x = rho * cos(phi);
+            double y = rho * sin(phi);
+            scanCart(0,i) = x;
+            scanCart(1,i) = y;
+        }
+        return scanCart;
+    }
+
+    MatrixXf cartToWorld(MatrixXf scanCart, Vector3f pose){
+        int nScanLines = scanCart.cols();
+        MatrixXf scanWorld(2,nScanLines);
+        double x = pose(0);
+        double y = pose(1);
+        double th = pose(2);
+        double costh = cos(th);
+        double sinth = sin(th);
+
+        // Transform all the coordinates and store them in scanWorld
+        for(int i=0; i<nScanLines; i++){
+            double xs = scanCart(0,i);
+            double ys = scanCart(1,i);
+            double xw = xs*costh - ys*sinth + x;
+            double yw = ys*costh + xs*sinth + y;
+            scanWorld(0,i) = xw;
+            scanWorld(1,i) = yw;
+        }
+        return scanWorld;
+    }
+
+    MatrixXf polarToWorld(MatrixXf scanPolar, Vector3f pose){
+        return cartToWorld(polarToCart(scanPolar),pose);
+    }
+
+    /** Simulate a laser scan */
     MatrixXf simScan(Vector3f pose, MatrixXf lines){
         int nLines = lines.cols();
         float x = pose(0);
@@ -115,10 +151,11 @@ public:
         VectorXf xEndTrans(nLines);
         VectorXf yEndTrans(nLines);
 
-        VectorXf a(nLines);
-        VectorXf b(nLines);
-        VectorXf c(nLines);
-        scanData.setZero();
+        VectorXd a(nLines);
+        VectorXd b(nLines);
+        VectorXd c(nLines);
+        scanData.resize(2,nScanLines);
+        // scanData.setZero();
 
         // Start and end values for the lines ending points.
         for(int i=0; i<nLines; i++){
@@ -126,7 +163,7 @@ public:
             yStart(i) = lines(1,i);
             xEnd(i)   = lines(2,i);
             yEnd(i)   = lines(3,i);
-            cout << "Line = (" << xStart(i) << "," << yStart(i) << "," << xEnd(i) << "," << yEnd(i) << ")" << endl;
+            // cout << "Line = (" << xStart(i) << "," << yStart(i) << "," << xEnd(i) << "," << yEnd(i) << ")" << endl;
 
             // Transformation of the lines to the laser scanner's coordinate system.
 
@@ -138,7 +175,7 @@ public:
             xEndTrans(i) = (xEnd(i)-x)*costh   + (yEnd(i)-y)*sinth;
             yEndTrans(i) = (yEnd(i)-y)*costh   - (xEnd(i)-x)*sinth;
             
-            cout << "LineTrans = (" << xStartTrans(i) << "," << yStartTrans(i) << "," << xEndTrans(i) << "," << yEndTrans(i) << ")" << endl;
+            // cout << "LineTrans = (" << xStartTrans(i) << "," << yStartTrans(i) << "," << xEndTrans(i) << "," << yEndTrans(i) << ")" << endl;
 
             // Starting and ending points are swapped if the x value of the 
             // starting point is bigger than the x value of the ending point.
@@ -151,20 +188,19 @@ public:
                 yEndTrans(i) = temp;
                 cout << "Reversed" << endl;
             }
-            cout << "LineTrans = (" << xStartTrans(i) << "," << yStartTrans(i) << "," << xEndTrans(i) << "," << yEndTrans(i) << ")" << endl;
+            // cout << "LineTrans = (" << xStartTrans(i) << "," << yStartTrans(i) << "," << xEndTrans(i) << "," << yEndTrans(i) << ")" << endl;
 
             // The line equations are calculated 
             //  a*x+ b*y=c
             a(i) = yStartTrans(i)-yEndTrans(i);
             b(i) = xEndTrans(i)-xStartTrans(i);
-            float a2 = a(i)*a(i);
-            float b2 = b(i)*b(i);
-            float l = sqrt(a2+b2);
-            cout << "l=" << l << endl;
+            double a2 = a(i)*a(i);
+            double b2 = b(i)*b(i);
+            double l = sqrt(a2+b2);
             a(i) = a(i)/l;
             b(i) = b(i)/l;
             c(i) = a(i)*xStartTrans(i)+b(i)*yStartTrans(i);
-            cout << a(i) << "x + " << b(i) << "y = " << c(i)<< endl;
+            cout << "Line " << i << ": " << a(i) << "x + " << b(i) << "y = " << c(i)<< endl;
         }
 
         /* -------------------------------------------------------------------
@@ -175,7 +211,7 @@ public:
             // Laserscanerens maksimale måleafstand.
             // Laser scanner maximum measured distance maxDistance(in meters)
             // Closest distance from the laser scanner.
-            float min_dist = maxDistance;
+            double min_dist = maxDistance;
 
             // Aktuelle vinkel laserscanner.
             // Current laser scanner angle 
@@ -189,10 +225,10 @@ public:
                 double temp = a(j)*cosphi + b(j)*sinphi;
                 // cout << "cos(phi)=" << cosphi << ", sin(phi)=" << sinphi << endl;
                 // cout << "temp=" << temp << endl;
-                if(abs(temp) > 1e-7){
+                if(abs(temp) > 1e-9){
                     double t = c(j)/temp;
                     if(t>0 && t<min_dist){
-                        if(abs(xStartTrans(j)-xEndTrans(j)) > 1e-7){
+                        if(abs(xStartTrans(j)-xEndTrans(j)) > 1e-9){
                             if(t*cosphi < xEndTrans(j) && t*cosphi > xStartTrans(j)) min_dist=t;
                         else 
                             if(yEndTrans(j) > yStartTrans(j)){
@@ -209,13 +245,12 @@ public:
             scanData(0,i) = phi;
             scanData(1,i) = min_dist;
         }
-
         return scanData;
     }
 
     LaserScanner() { 
         // Laser Parameters
-        this->maxDistance = 4.f;
+        this->maxDistance = 4.0f;
         this->resolDeg = 0.36f;
         this->fov = 180.0f;
         this->init();
