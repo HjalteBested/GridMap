@@ -58,6 +58,7 @@ public:
     int y = -1; // y-position
     int h = 0;	// Heuristic cost
     int g = 0;  // Cost from start to node
+    int c = 0;  // Terrain Cost
     int type = NODE_TYPE_ZERO;
     int flag = NODE_FLAG_UNDEFINED;
     MapNode *parent = 0;
@@ -73,26 +74,36 @@ public:
     }
 
     int f() {
-        return g + h;
+        return g + h + c;
     }
 };
 
 class LaserScanner {
 public:
-    // Vector3f pose; /// Scan Pose in world coordinates (x,y,theta);
-    float maxDistance; /// Max Distance (Laser Measurement Range) in meters.
-    float resolDeg;    /// Laser Scanner Resolution in Deg
-    float resolRad;    /// Laser Scanner Resolution in Rad
-    float fov;         /// Laser Scanner Field-of-view in Deg
+    // Create Laser Scanner 
+    LaserScanner() { 
+        // Laser Parameters
+        this->maxDistance = 4.0f;
+        this->resolDeg = 0.36f;
+        this->fov = 180.0f;
+        this->init();
+    } 
 
-    int nScanLines; /// Number of scanning lines (deduced from scan width and resolution)
-    MatrixXf scanData;
+    // Vector3f pose;   /// Scan Pose in world coordinates (x,y,theta);
+    float maxDistance;  /// Max Distance (Laser Measurement Range) in meters.
+    float resolDeg;     /// Laser Scanner Resolution in Deg
+    float resolRad;     /// Laser Scanner Resolution in Rad
+    float fov;          /// Laser Scanner Field-of-view in Deg
+
+    int nScanLines;     /// Number of scanning lines (deduced from scan width and resolution)
+    MatrixXf scanData;  /// Matrix for holding the laser scan data format is scanData(2,nScanLines), where phi(i) = scanData(0,i), rho(i) = scanData(1,i)
 
     void init(){
         this->resolRad = resolDeg*M_PI/180.0;
         this->nScanLines = round(fov/resolDeg+1);
     }
 
+    /** Convert polar coordinates to cartesian coordinates */
     MatrixXf polarToCart(MatrixXf scanPolar){
         int nScanLines = scanPolar.cols();
         MatrixXf scanCart(2,nScanLines);
@@ -107,6 +118,7 @@ public:
         return scanCart;
     }
 
+    /** Convert cartesian coordinates in the scanner frame to cartesian coordinates in the world frame */
     MatrixXf cartToWorld(MatrixXf scanCart, Vector3f pose){
         int nScanLines = scanCart.cols();
         MatrixXf scanWorld(2,nScanLines);
@@ -128,6 +140,7 @@ public:
         return scanWorld;
     }
 
+    /** Convert polar coordinates in the scanner frame to cartesian coordinates in the world frame */
     MatrixXf polarToWorld(MatrixXf scanPolar, Vector3f pose){
         return cartToWorld(polarToCart(scanPolar),pose);
     }
@@ -137,8 +150,11 @@ public:
         int nLines = lines.cols();
         float x = pose(0);
         float y = pose(1);
-        float theta = pose(2);
-        cout << "theta=" << theta << endl;
+        float th = pose(2);
+        float costh = cos(th);
+        float sinth = sin(th);
+        // cout << "th=" << th << endl;
+
         // Global system coordinates
         VectorXf xStart(nLines);
         VectorXf yStart(nLines);
@@ -166,15 +182,11 @@ public:
             // cout << "Line = (" << xStart(i) << "," << yStart(i) << "," << xEnd(i) << "," << yEnd(i) << ")" << endl;
 
             // Transformation of the lines to the laser scanner's coordinate system.
-
             // Lines are converted to the new coordinate system.
-            float costh = cos(theta);
-            float sinth = sin(theta);
             xStartTrans(i) = (xStart(i)-x)*costh + (yStart(i)-y)*sinth;
             yStartTrans(i) = (yStart(i)-y)*costh - (xStart(i)-x)*sinth; 
             xEndTrans(i) = (xEnd(i)-x)*costh   + (yEnd(i)-y)*sinth;
             yEndTrans(i) = (yEnd(i)-y)*costh   - (xEnd(i)-x)*sinth;
-            
             // cout << "LineTrans = (" << xStartTrans(i) << "," << yStartTrans(i) << "," << xEndTrans(i) << "," << yEndTrans(i) << ")" << endl;
 
             // Starting and ending points are swapped if the x value of the 
@@ -186,7 +198,6 @@ public:
                 temp = yStartTrans(i);
                 yStartTrans(i) = yEndTrans(i);
                 yEndTrans(i) = temp;
-                cout << "Reversed" << endl;
             }
             // cout << "LineTrans = (" << xStartTrans(i) << "," << yStartTrans(i) << "," << xEndTrans(i) << "," << yEndTrans(i) << ")" << endl;
 
@@ -200,31 +211,26 @@ public:
             a(i) = a(i)/l;
             b(i) = b(i)/l;
             c(i) = a(i)*xStartTrans(i)+b(i)*yStartTrans(i);
-            cout << "Line " << i << ": " << a(i) << "x + " << b(i) << "y = " << c(i)<< endl;
+            // cout << "Line " << i << ": " << a(i) << "x + " << b(i) << "y = " << c(i)<< endl;
         }
 
         /* -------------------------------------------------------------------
          * Conversion of what the laser scanner sees to polar coordinates.
          * -------------------------------------------------------------------*/
-        // For each laser scanner angle
+        // For each laser scanner angle:
         for(int i=0; i<nScanLines; i++){
-            // Laserscanerens maksimale måleafstand.
             // Laser scanner maximum measured distance maxDistance(in meters)
             // Closest distance from the laser scanner.
             double min_dist = maxDistance;
 
-            // Aktuelle vinkel laserscanner.
             // Current laser scanner angle 
             double phi = i*resolRad-fov/2.0*M_PI/180.0; 
-            // linierne gennemgås for at finde deres afstand til laserscanneren
             // Find distance from the lines to laser scanner in the current angle
             double cosphi = cos(phi);
             double sinphi = sin(phi);
             // cout << "cos(phi)=" << cosphi << ", sin(phi)=" << sinphi << endl;
             for(int j=0; j<nLines; j++){
                 double temp = a(j)*cosphi + b(j)*sinphi;
-                // cout << "cos(phi)=" << cosphi << ", sin(phi)=" << sinphi << endl;
-                // cout << "temp=" << temp << endl;
                 if(abs(temp) > 1e-9){
                     double t = c(j)/temp;
                     if(t>0 && t<min_dist){
@@ -248,18 +254,14 @@ public:
         return scanData;
     }
 
-    LaserScanner() { 
-        // Laser Parameters
-        this->maxDistance = 4.0f;
-        this->resolDeg = 0.36f;
-        this->fov = 180.0f;
-        this->init();
-    } 
+
 
 };
 
 class GridMap {
 public:
+    MatrixXf occupancyMap;
+
     GridMap() { }
 
     vector<Vector2i> bresenhamPoints(int x0, int y0, int x1, int y1){
@@ -304,6 +306,21 @@ public:
         }   
         return points;
     }
+
+    int fix(float val){
+        if(val > 0) return floor(val);
+        if(val < 0) return ceil(val);
+        return val;
+    }
+
+    void updateMap(Vector3f scanPose, MatrixXf scanPolar, float maxLSDist, float cellSize){
+        
+
+    }
+
+
+
+
 
 };
 

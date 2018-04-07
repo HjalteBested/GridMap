@@ -25,7 +25,6 @@ int main(){
 
     mapSize = MapSize(w,h,cellSize);
     cout << mapSize.height << "," << mapSize.width << "," << mapSize.size << "," << mapSize.cellSize << "," << mapSize.heightInMeters() << "," << mapSize.widthInMeters() << endl;
-    vector<Vector2i> points = map.bresenhamPoints(0, 0, 30, 10);
 
     Vector3f pose; pose << 0,0,M_PI/2;
     cout << "pose:\n" << pose << endl;
@@ -37,9 +36,11 @@ int main(){
     MatrixXf scanPol   = laserScanner.simScan(pose,lines);
     MatrixXf scanCart  = laserScanner.polarToCart(scanPol);
     MatrixXf scanWorld = laserScanner.polarToWorld(scanPol,pose);
+
+
+
+    vector<Vector2i> points = map.bresenhamPoints(0, 0, 30, 10);
     
-
-
     /*
 	for(int i=0; i<points.size(); i++){
 		cout << points[i].transpose() << endl;
