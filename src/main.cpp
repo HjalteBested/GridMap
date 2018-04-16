@@ -10,6 +10,7 @@
 
 #include "GridMap.h"
 #include "RobotMPC.h"
+// #include <opencv2/imgcodecs/imgcodecs.hpp>
 
 using namespace std;
 using namespace Eigen;
@@ -21,6 +22,7 @@ GridMap map;
 LaserScanner laserScanner;
 RobotPathFollowMPC pf = RobotPathFollowMPC();
 
+Mat mapToPlot;
 Mat mapToDraw;
 void drawPath(Mat &map, vector<MapNode *> path);
 void drawExaminedNotes(Mat &mapToDraw);
@@ -189,7 +191,7 @@ int main(){
 
 	    // Call this whenever new scandata is available
 	    map.updateMap(&laserScanner, maxLSDist);
-	    Mat mapToPlot = map.mapData*127;
+	    mapToPlot = map.mapData*127;
 	    // This following needs only to be done when a new route should be planned
 	    map.transform();	// Dialate Map and Compute Distance Transform
 	    Point wayPointCell = map.determineNextWaypointCell(&laserScanner);
@@ -215,18 +217,21 @@ int main(){
         
         // cout << "waypoints:\n" << waypoints << endl;
         }
-
+        
         map.dialatedMap.convertTo(mapToDraw,CV_8UC3);
         cvtColor(mapToDraw, mapToDraw, COLOR_GRAY2BGR);
-        //drawExaminedNotes(mapToDraw);
+        drawExaminedNotes(mapToDraw);
         drawPath(mapToDraw, path);
 
         // imshow( "mapDistance", 100/map.distanceMap);
         resize(mapToPlot, mapToPlot, Size(map.height*2, map.width*2), 0, 0, INTER_NEAREST);
         resize(mapToDraw, mapToDraw, Size(map.height*2, map.width*2), 0, 0, INTER_NEAREST);
+        if(ii % 30 == 0){
+            imshow( "mapData", mapToPlot);
+            imshow( "Path", mapToDraw);
+            waitKey(1);
+        }
 
-        imshow( "mapData", mapToPlot);
-        imshow( "Path", mapToDraw);
         }
 
         // Controller
@@ -236,7 +241,6 @@ int main(){
         pose = pf.kinupdate(pose, pf.uw, pf.T);
         time += pf.T;
 
-	    waitKey(1);
 	}
     cout << "Number of steps in simulation = " << nstp << endl;
 
