@@ -18,7 +18,7 @@ using namespace cv;
 
 
 // MapSize mapSize;
-GridMap map;
+GridMap gridMap;
 LaserScanner laserScanner;
 RobotPathFollowMPC pf = RobotPathFollowMPC();
 
@@ -27,8 +27,6 @@ Mat mapToDraw;
 void drawPath(Mat &map, vector<MapNode *> path);
 void drawExaminedNotes(Mat &mapToDraw);
 vector<MapNode *> simplifyPath(vector<MapNode *> path);
-
-
 
 
 int main(){
@@ -55,8 +53,6 @@ int main(){
     float cellSize = 0.03;
     float maxLSDist = 3.5f;
 
-
-
 	// Define Lines in cartesian space
     // MatrixXf lines(4,5);
     //lines.col(0) << 2, 1, -2, 1;
@@ -71,7 +67,7 @@ int main(){
     */
 
     // Walls
-    /*
+
     MatrixXf lines(4,36);
     lines.col(0) << 0,    0.25, 3.5,    0.25;
     lines.col(1) << 0,   -0.25,   3,   -0.25;
@@ -112,7 +108,8 @@ int main(){
     lines.col(33) << 2.7, -2.6, 2.9, -2.8;
     lines.col(34) << 2.9, -2.8,  2.8, -3.1;
     lines.col(35) << 2.8, -3.1,  2.4, -2.8;
-    */
+
+    /*
 
     MatrixXf lines(4,31);
     lines.col(0) << 0,    0.5,  8,      0.5;
@@ -147,33 +144,31 @@ int main(){
     lines.col(28) << 1,   -2,    8,      -2.5;
     lines.col(29) << 8,   -2.5,  8,      -4;
     lines.col(30) << 7,   -3,    7,      -4;
-
+    */
     cout << "lines:\n" << lines << endl;
 
     // Setup the map
-    map.resize(w,h,cellSize);
-    cout << "Map:  H:" << map.heightInMeters() << "m W:" << map.widthInMeters() << "m with cellSize:" << map.cellSize << "m^2 ---> H:" << map.height << " W:" << map.width << " Size:" << map.size  << endl;
-    map.setOffset(0,5);
+    gridMap.resize(w,h,cellSize);
+    cout << "Map:  H:" << gridMap.heightInMeters() << "m W:" << gridMap.widthInMeters() << "m with cellSize:" << gridMap.cellSize << "m^2 ---> H:" << gridMap.height << " W:" << gridMap.width << " Size:" << gridMap.size  << endl;
+    gridMap.setOffset(0,5);
 
 
     // Make structuring element for map dialation - based on robot width, or 2*radius, or som safety margin
     float robotWidth = 0.28;
-    map.makeStrel(robotWidth);
+    gridMap.makeStrel(robotWidth);
 
 
 	// Create OpenCV Windows
     namedWindow( "mapData", WINDOW_AUTOSIZE );
     namedWindow( "Path", WINDOW_AUTOSIZE );
 	moveWindow("mapData", 0,0);
-    moveWindow("Path", 2*map.width,0);
+    moveWindow("Path", 2*gridMap.width,0);
 
     Vector3f pose; pose << 0.26, 0, 0;
     
 
     int nstp=2800;
     float time=0;
-    MatrixXf simData;
-    simData.resize(13,nstp);
 
 
     // Simulation
@@ -190,24 +185,30 @@ int main(){
 		laserScanner.simScan(lines);
 
 	    // Call this whenever new scandata is available
+<<<<<<< HEAD
 	    map.updateMap(&laserScanner, maxLSDist);
 	    mapToPlot = map.mapData*127;
+=======
+        gridMap.updateMap(&laserScanner, maxLSDist);
+        Mat mapToPlot = gridMap.mapData*127;
+>>>>>>> 3d94735bdfc1c9e7e8a5485652c1f8ade18df679
 	    // This following needs only to be done when a new route should be planned
-	    map.transform();	// Dialate Map and Compute Distance Transform
-	    Point wayPointCell = map.determineNextWaypointCell(&laserScanner);
+        gridMap.transform();	// Dialate Map and Compute Distance Transform
+        Point wayPointCell = gridMap.determineNextWaypointCell(&laserScanner);
         // Vector2f wayPoint = map.determineNextWaypoint(&laserScanner);
         // cout << "wayPointCell = " << wayPointCell << endl;
 
-        Point robotCell = map.worldToMap(pose(0),pose(1));
+        Point robotCell = gridMap.worldToMap(pose(0),pose(1));
 
-        vector<MapNode *> path    = map.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 6000);
-        vector<MapNode *> newpath = map.simplifyPath(path);
-        vector<Point2f> waypoints = map.pathToWorld(newpath);
-        // vector<Point2f> waypoints = map.findpathAsWaypoints(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y);
+        vector<MapNode *> path    = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 6000);
+        if(path.size() > 1){
+            vector<MapNode *> newpath = gridMap.simplifyPath(path);
+            vector<Point2f> waypoints = gridMap.pathToWorld(newpath);
         
-        if(waypoints.size()>1){
-            MatrixX2f wp(waypoints.size(),2);
-            for(int i=0; i<waypoints.size(); i++){
+            int nWayPoints = waypoints.size();
+            // if(nWayPoints > 5) nWayPoints = 5;
+            MatrixX2f wp(nWayPoints,2);
+            for(int i=0; i<nWayPoints; i++){
                 wp(i,0) = waypoints[i].x;
                 wp(i,1) = waypoints[i].y;
             }
@@ -217,13 +218,19 @@ int main(){
         
         // cout << "waypoints:\n" << waypoints << endl;
         }
+<<<<<<< HEAD
         
         map.dialatedMap.convertTo(mapToDraw,CV_8UC3);
+=======
+
+        gridMap.dialatedMap.convertTo(mapToDraw,CV_8UC3);
+>>>>>>> 3d94735bdfc1c9e7e8a5485652c1f8ade18df679
         cvtColor(mapToDraw, mapToDraw, COLOR_GRAY2BGR);
         drawExaminedNotes(mapToDraw);
         drawPath(mapToDraw, path);
 
         // imshow( "mapDistance", 100/map.distanceMap);
+<<<<<<< HEAD
         resize(mapToPlot, mapToPlot, Size(map.height*2, map.width*2), 0, 0, INTER_NEAREST);
         resize(mapToDraw, mapToDraw, Size(map.height*2, map.width*2), 0, 0, INTER_NEAREST);
         if(ii % 30 == 0){
@@ -232,6 +239,14 @@ int main(){
             waitKey(1);
         }
 
+=======
+        resize(mapToPlot, mapToPlot, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);
+        resize(mapToDraw, mapToDraw, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);
+
+        imshow( "mapData", mapToPlot);
+        imshow( "Path", mapToDraw);
+        waitKey(1);
+>>>>>>> 3d94735bdfc1c9e7e8a5485652c1f8ade18df679
         }
 
         // Controller
@@ -240,7 +255,10 @@ int main(){
         // Robot Simulation
         pose = pf.kinupdate(pose, pf.uw, pf.T);
         time += pf.T;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3d94735bdfc1c9e7e8a5485652c1f8ade18df679
 	}
     cout << "Number of steps in simulation = " << nstp << endl;
 
@@ -266,20 +284,20 @@ void drawPath(Mat &mapToDraw, vector<MapNode *> path) {
 
     // DrawPath
     for (int i=0; i<path.size(); i++) {
-        MapNode node = wrapNode(*path[i],map.mapData.cols,map.mapData.rows);
+        MapNode node = wrapNode(*path[i],gridMap.mapData.cols,gridMap.mapData.rows);
         mapToDraw.at<Vec3b>(node.y, node.x) = Vec3b(20 + (1.0 - ((double) i / path.size())) * 80, 200, 255);
     }
 
     cvtColor(mapToDraw, mapToDraw, COLOR_HSV2BGR);
     
     // Draw StartNode
-    MapNode *startNode = map.astar.startNode;
+    MapNode *startNode = gridMap.astar.startNode;
     if(startNode && startNode->y >= 0 && startNode->y < mapToDraw.rows && startNode->x >= 0 && startNode->x < mapToDraw.cols){
         mapToDraw.at<Vec3b>(startNode->y, startNode->x) = Vec3b(255, 0, 0);
     }
 
     // Draw EndNode
-    MapNode *targetNode = map.astar.targetNode;
+    MapNode *targetNode = gridMap.astar.targetNode;
     if(targetNode && targetNode->y >= 0 && targetNode->y < mapToDraw.rows && targetNode->x >= 0 && targetNode->x < mapToDraw.cols){
         mapToDraw.at<Vec3b>(targetNode->y, targetNode->x) = Vec3b(0, 0, 255);
     }
@@ -288,13 +306,13 @@ void drawPath(Mat &mapToDraw, vector<MapNode *> path) {
 
 void drawExaminedNotes(Mat &mapToDraw) {
     // Draw Open List
-    for (uint i = 0; i < map.astar.openList.size(); i++) {
-        MapNode node = wrapNode(*map.astar.openList[i],mapToDraw.cols,mapToDraw.rows);
+    for (uint i = 0; i < gridMap.astar.openList.size(); i++) {
+        MapNode node = wrapNode(*gridMap.astar.openList[i],mapToDraw.cols,mapToDraw.rows);
         mapToDraw.at<Vec3b>(node.y, node.x) = Vec3b(210, 210, 210);
     }
     // Draw Closed List
-    for (uint i = 0; i < map.astar.closedList.size(); i++) {
-        MapNode node = wrapNode(*map.astar.closedList[i],mapToDraw.cols,mapToDraw.rows);
+    for (uint i = 0; i < gridMap.astar.closedList.size(); i++) {
+        MapNode node = wrapNode(*gridMap.astar.closedList[i],mapToDraw.cols,mapToDraw.rows);
         mapToDraw.at<Vec3b>(node.y, node.x) = Vec3b(210, 210, 210);
     }
 }
