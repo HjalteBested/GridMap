@@ -12,10 +12,10 @@
 #include <iostream>
 #include <Eigen/Dense>
 
-#include <opencv2/core.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/highgui.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+// #include <opencv2/imgcodecs/imgcodecs.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #include "astar.h"
 
 
@@ -631,8 +631,8 @@ public:
     void transform(){
         dilate( mapData > 0, dialatedMap, strel);
         bitwise_not(dialatedMap, invDialatedMap);
-        distanceTransform(invDialatedMap, distanceMap_32F, DIST_L2, 5, CV_32F);
-        distanceMap_32F.convertTo(distanceMap,dialatedMap.type());
+        // distanceTransform(invDialatedMap, distanceMap_32F, CV_DIST_L2, 5, CV_32F);
+        // distanceMap_32F.convertTo(distanceMap,dialatedMap.type());
 
    }
 
@@ -700,7 +700,7 @@ public:
                 MapNode *node = astar.mapAt(x,y);
                 node->type = NODE_TYPE_ZERO;
                 if(dialatedMapAt(x,y) > 0) node->type = NODE_TYPE_OBSTACLE;
-                node->obstdist = distanceMapAt(x,y);
+                // node->obstdist = distanceMapAt(x,y);
             }
         }
 
