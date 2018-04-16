@@ -9,74 +9,19 @@
 #ifndef GRIDMAP_H
 #define GRIDMAP_H
 
+#include <iostream>
 #include <Eigen/Dense>
+
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
+#include "astar.h"
+
 
 using namespace std;
 using namespace Eigen;
 using namespace cv;
-
-const int ALLOW_DIAGONAL_PASSTHROUGH = 1;
-const int NODE_FLAG_CLOSED = -1;
-const int NODE_FLAG_UNDEFINED = 0;
-const int NODE_FLAG_OPEN = 1;
-
-const int NODE_TYPE_ZERO = 0;
-const int NODE_TYPE_OBSTACLE = 1;
-const int NODE_TYPE_START = 2;
-const int NODE_TYPE_END = 3;
-
-const int G_DIRECT_COST   = 100; 
-const int G_DIAGONAL_COST = 141;	// ≈ 100 sqrt(2)
-const int H_AMITGAIN = 0;			// Zero means it is disabled completely
-
-class MapSize {
-public:
-    float cellSize = 1;
-    unsigned long width = 0;
-    unsigned long height = 0;
-    unsigned long size = 0;
-
-    MapSize() { }
-    MapSize(float widthInMeters, float heightInMeters, float cellSize) {
-        this->cellSize = cellSize;
-        this->height = ceil(heightInMeters/cellSize);
-        this->width = ceil(widthInMeters/cellSize);
-        this->size = width * height;
-    }
-
-    float widthInMeters() {
-        return width*cellSize;
-    }
-    float heightInMeters() {
-        return height*cellSize;
-    }
-};
-
-class MapNode {
-public:
-    int x = -1;	// x-position
-    int y = -1; // y-position
-    int h = 0;	// Heuristic cost
-    int g = 0;  // Cost from start to node
-    int c = 0;  // Terrain Cost
-    int type = NODE_TYPE_ZERO;
-    int flag = NODE_FLAG_UNDEFINED;
-    MapNode *parent = 0;
-
-    MapNode() { }
-
-    MapNode(int x, int y, int type = NODE_TYPE_ZERO, int flag = NODE_FLAG_UNDEFINED, MapNode *parent = 0){
-        this->x = x;
-        this->y = y;
-        this->type = type;
-        this->flag = flag;
-        this->parent = parent;
-    }
-
-    int f() {
-        return g + h + c;
-    }
-};
 
 class LaserScanner {
 public:
@@ -97,19 +42,23 @@ public:
     int nScanLines;     /// Number of scanning lines (deduced from scan width and resolution)
     MatrixXf scanData;  /// Matrix for holding the laser scan data format is scanData(2,nScanLines), where phi(i) = scanData(0,i), rho(i) = scanData(1,i)
 
+    /** Initialise LaserScanner: Calculate the resolution in radian and determine the number of scanning lines (nScanLines). */
     void init(){
         this->resolRad = resolDeg*M_PI/180.0;
         this->nScanLines = round(fov/resolDeg+1);
     }
 
-    /// Scan Pose in world coordinates (x,y,theta);
-    Vector3f pose;      
+    Vector3f pose;  /// Scan Pose in world coordinates (x,y,theta)
+
+    /// Set Scan Pose in world coordinates (x,y,theta)
     void setPose(Vector3f newpose){ 
         pose = newpose;
     }
+    /// Set Scan Pose in world coordinates (x,y,theta)
     void setPose(float x, float y, float th){ 
         pose << x,y,th; 
     }
+    /// Return pose
     Vector3f getPose(){ 
         return pose; 
     }
@@ -151,10 +100,6 @@ public:
         return scanWorld;
     }
 
-    inline MatrixXf cartToWorld(MatrixXf scanCart){
-        return cartToWorld(scanCart, this->pose);
-    }
-
     /** Convert polar coordinates in the scanner frame to cartesian coordinates in the world frame directly */
     inline MatrixXf polarToWorld(MatrixXf scanPolar, Vector3f pose){
         int nScanLines = scanPolar.cols();
@@ -176,6 +121,11 @@ public:
             scanWorld(1,i) = yw;
         }
         return scanWorld;
+    }
+
+    /** Overloaded convinience method */
+    inline MatrixXf cartToWorld(MatrixXf scanCart){
+        return cartToWorld(scanCart, this->pose);
     }
 
     /** Overloaded convinience method */
@@ -350,11 +300,12 @@ public:
     unsigned long width = 0;
     unsigned long height = 0;
     unsigned long size = 0;
-    float xoffset = 5;
-    float yoffset = 5;
+    float xoffset = 0;
+    float yoffset = 0;
 
-    int fillMode = 2;
-    int clearMode = 1;
+    int fillMode = 0;
+    int clearMode = 0;
+    Astar astar;
 
     float widthInMeters() {
         return width*cellSize;
@@ -363,16 +314,24 @@ public:
         return height*cellSize;
     }
 
+    void setOffset(float xoffset, float yoffset){
+        this->xoffset = xoffset;
+        this->yoffset = yoffset;
+    }
+
     void resize(float widthInMeters, float heightInMeters, float cellSize){
         this->cellSize = cellSize;
         this->height = ceil(heightInMeters/cellSize);
         this->width = ceil(widthInMeters/cellSize);
         this->size = width * height;
+        this->setOffset(widthInMeters/2,heightInMeters/2);
         mapData.create(height,width,CV_8SC1);
         dialatedMap.create(height,width,CV_8SC1);
         invDialatedMap.create(height,width,CV_8SC1);
         distanceMap_32F.create(height,width,CV_32F);
         distanceMap.create(height,width,CV_8SC1);
+        astar = Astar(height, width);
+        astar.wrapMap = wrapMap;
         this->clear();
     }
 
@@ -423,11 +382,9 @@ public:
 
         for(int i=0; i<N; i++){
             if(steep){
-                // point << y, x;
                 point.x = y;
                 point.y = x;
             } else {
-                // point << x, y;
                 point.x = x;
                 point.y = y;
             }
@@ -460,10 +417,39 @@ public:
         return cell;
     }
 
-    /*
+    inline Point worldToMap(float x, float y){
+        int rows = mapData.rows;
+        int cols = mapData.cols;
+        x = x+xoffset;
+        y = y+yoffset;
+        Point cell;
+        cell.x = x/cellSize;
+        cell.y = rows - floor(y/cellSize + 1);
+        return cell;
+    }
+
+    inline Point2f mapToWorld(int x, int y){
+        int rows = mapData.rows;
+        Point2f world;
+        // Translate from map coordinates to world coordinates
+        world.x =  (x+0.5) * cellSize - xoffset;
+        world.y =  (rows-y-0.5) * cellSize - yoffset;
+        return world;
+    }
+
+    inline Point worldToMap(Point2f world){
+        return mapToWorld(world.x,world.y);
+    }
+
+    inline Point2f mapToWorld(Point cell){
+        return mapToWorld(cell.x,cell.y);
+    }
+
+
     inline Point wrap(Point cell){
         int rows = mapData.rows;
         int cols = mapData.cols;
+
         // Wrapping the map
         while(cell.x < 0)       cell.x += cols;
         while(cell.x >= cols)   cell.x -= cols;
@@ -471,34 +457,59 @@ public:
         while(cell.y >= rows)   cell.y -= rows;
         return cell;
     }
-    */
+
+    inline int wx(int x){
+        // Wrapping the map
+        if(wrapMap){
+            int cols = mapData.cols;
+            while(x < 0)       x += cols;
+            while(x >= cols)   x -= cols;
+        }   
+        return x;
+    }
+    inline int wy(int y){
+        if(wrapMap){
+            // Wrapping the map
+            int rows = mapData.rows;
+            while(y < 0)       y += rows;    
+            while(y >= rows)   y -= rows;
+        }
+        return y;
+    } 
+
+    inline void resetMapNode(int x, int y, char value){
+        MapNode*node = astar.mapAt(x,y);
+        if(node != NULL){
+            node->x = x;
+            node->y = y;
+            node->clear();
+            node->type = value;
+        }
+    }
 
     void setCell(int x, int y, char value, int mode){
         int rows = mapData.rows;
         int cols = mapData.cols;
+        int xm = wx(x);
+        int ym = wy(y);
 
-        // Wrapping the map
-        if(wrapMap){
-            while(x < 0)       x += cols;
-            while(x >= cols)   x -= cols;
-            while(y < 0)       y += rows;    
-            while(y >= rows)   y -= rows;
-        }
-        
+        if((0 <= xm && xm < cols) && (0 <= ym && ym < rows)){
+            resetMapNode(x,y,value);
+            mapData.at<char>(ym,xm) = value;
 
-        if((0 <= x && x < cols) && (0 <= y && y < rows)){
-            mapData.at<char>(y,x) = value;
+            int xm1; int xp1; int ym1; int yp1;
             if(mode > 0){
-                if(0 <= x-1)    mapData.at<char>(y,x-1) = value; 
-                if(x+1 < cols)  mapData.at<char>(y,x+1) = value; 
-                if(0 <= y-1)    mapData.at<char>(y-1,x) = value; 
-                if(y+1 < rows)  mapData.at<char>(y+1,x) = value; 
+                xm1=wx(xm-1); xp1=wx(xm+1); ym1=wy(ym-1); yp1=wy(ym+1);
+                if(0 <= xm1){    mapData.at<char>(ym,xm1) = value; resetMapNode(x-1,y,value);}
+                if(xp1 < cols){  mapData.at<char>(ym,xp1) = value; resetMapNode(x+1,y,value);}
+                if(0 <= ym1){    mapData.at<char>(ym1,xm) = value; resetMapNode(x,y-1,value);}
+                if(yp1 < rows){  mapData.at<char>(yp1,xm) = value; resetMapNode(x,y+1,value);}
             }
             if(mode > 1){
-                if(0 <= x-1 && 0 <= y-1)    mapData.at<char>(y-1,x-1)=value;
-                if(0 <= x-1 && y+1 < rows)  mapData.at<char>(y+1,x-1)=value; 
-                if(x+1 < cols && 0 <= y-1)  mapData.at<char>(y-1,x+1)=value; 
-                if(x+1 < cols && y+1 < rows)mapData.at<char>(y+1,x+1)=value;
+                if(0 <= xm1 && 0 <= ym1){    mapData.at<char>(ym1,xm1)=value;  resetMapNode(x-1,y-1,value);}
+                if(0 <= xm1 && yp1 < rows){  mapData.at<char>(yp1,xm1)=value;  resetMapNode(x-1,y+1,value);}
+                if(xp1 < cols && 0 <= ym1){  mapData.at<char>(ym1,xp1)=value;  resetMapNode(x+1,y-1,value);}
+                if(xp1 < cols && yp1 < rows){mapData.at<char>(yp1,xp1)=value;  resetMapNode(x+1,y+1,value);}
             }
             // cout << "SetCell (" << x << "," << y << ") = " << int(value) << ",mode=" << mode << endl;
         }
@@ -537,6 +548,25 @@ public:
 
         if((0 <= x && x < cols) && (0 <= y && y < rows)){
             return dialatedMap.at<uchar>(y,x);
+        }
+
+        return 0xFF;
+    }
+
+    uchar distanceMapAt(int x, int y){
+        int rows = mapData.rows;
+        int cols = mapData.cols;
+
+        // Wrapping the map
+        if(wrapMap){
+            while(x < 0)       x += cols;
+            while(x >= cols)   x -= cols;
+            while(y < 0)       y += rows;    
+            while(y >= rows)   y -= rows;
+        }
+
+        if((0 <= x && x < cols) && (0 <= y && y < rows)){
+            return distanceMap.at<uchar>(y,x);
         }
 
         return 0;
@@ -599,17 +629,17 @@ public:
     }
 
     void transform(){
-        dilate( mapData>0, dialatedMap, strel);
+        dilate( mapData > 0, dialatedMap, strel);
         bitwise_not(dialatedMap, invDialatedMap);
         distanceTransform(invDialatedMap, distanceMap_32F, DIST_L2, 5, CV_32F);
         distanceMap_32F.convertTo(distanceMap,dialatedMap.type());
-    }
 
-    /** Determine next waypoint defined as the furthest point seen by the laserscanner, 
-    not occupied in the dialated map, with preference for scanlines with small angles, achieved by 
-    iterating from the middle and out and only replacing if a longer distance is found. */
-    Vector2f determineNextWaypoint(LaserScanner *scan){
-        Vector2f waypoint; // Output
+   }
+
+    /** Determine next waypoint defined as the furthest point seen by the laserscanner which is
+    not occupied in the dialated obstacle map. The search has a preference for scanlines with small angles, which is achieved by 
+    iterating from the middle and out and only replacing if a longer distance is found. Thus, small angles are only used in case of ties.*/
+    Point determineNextWaypointCell(LaserScanner *scan){
         float biggestDistanceInCells = 0;
         Point mostDistantCell;
         int nScanLinesHalf = scan->nScanLines/2;
@@ -621,14 +651,19 @@ public:
                 if(j==0)   k = nScanLinesHalf-i;
                 else       k = nScanLinesHalf+i;
                 if(k >= 0 && k < scan->nScanLines){
-                    float xs = scanWorld(0,k);
-                    float ys = scanWorld(1,k);
+                    float xs  = scanWorld(0,k);
+                    float ys  = scanWorld(1,k);
+                    float phi = scanPolar(0,k);
                     float rho = scanPolar(1,k);
-                    if(rho < biggestDistanceInCells*cellSize) continue;
+                    if(rho < (biggestDistanceInCells+1)*cellSize) continue;
                     Point cell = findCell(xs, ys);
+                    // int obstdist = distanceMapAt(cell.x,cell.y);
 
                     // Clear search for furthest available point using Bresenham's algorithm
-                    vector<Point> points = bresenhamPoints(scanPosCell.x, scanPosCell.y, cell.x, cell.y);
+                    Point closestOccupiedPoint;
+                    vector<Point> points = bresenhamPoints(scanPosCell.x, scanPosCell.y, cell.x, cell.y);                    
+
+                    // cout << "Diff:" <<scanPosCell-cell << endl;
                     for(uint ii=0; ii<points.size(); ii++){
                         Point point = points[ii];
                         float dx = point.x - scanPosCell.x;
@@ -637,22 +672,62 @@ public:
                         if(celldist > biggestDistanceInCells && dialatedMapAt(point.x,point.y) == 0){
                             biggestDistanceInCells = celldist;
                             mostDistantCell = point;
+                            // best_points = points;
                         }
                     }
                 }
             }
         }
-
-        // Translate from map coordinates to world coordinates
-        waypoint << mostDistantCell.x * cellSize - cellSize/2 - xoffset,
-                    dialatedMap.rows * cellSize - (mostDistantCell.y * cellSize - cellSize/2) - yoffset;
-
-        return waypoint;
+  
+        return mostDistantCell;
     }
-    
 
+    /** Determine next waypoint defined as the furthest point seen by the laserscanner, 
+    not occupied in the dialated map, with preference for scanlines with small angles, achieved by 
+    iterating from the middle and out and only replacing if a longer distance is found. */
+    inline Point2f determineNextWaypoint(LaserScanner *scan){
+        return mapToWorld(determineNextWaypointCell(scan));
+    }
 
+    /** This function will find the minimal cost path from the starting cell to the target cell. 
+    The function uses the A* search algorithm with tie-breaker and an additional cost related to 
+    the obstacle distance. */
+    vector<MapNode *> findpath(int xStart, int yStart, int xTarget, int yTarget, unsigned long maxIter = 10000){
+        vector<MapNode *> path;
+        astar.clear();
+        for (int y = 0; y < mapData.rows; y++) {
+            for (int x = 0; x < mapData.cols; x++) {
+                MapNode *node = astar.mapAt(x,y);
+                node->type = NODE_TYPE_ZERO;
+                if(dialatedMapAt(x,y) > 0) node->type = NODE_TYPE_OBSTACLE;
+                node->obstdist = distanceMapAt(x,y);
+            }
+        }
 
+        return astar.findpath(xStart, yStart, xTarget, yTarget, maxIter);
+    }
+
+    inline vector<MapNode *> simplifyPath(vector<MapNode *> path){
+        return astar.simplifyPath(path);
+    }
+
+    vector<Point2f> pathToWorld(vector<MapNode *> path){
+        vector<Point2f> waypoints;
+        for(int i=0; i<path.size(); i++){
+            waypoints.push_back(mapToWorld(path[i]->x,path[i]->y));
+        }
+        
+        cout << "wayPoints:";
+        for(int i=0; i<waypoints.size(); i++){
+            cout << "->(" << waypoints[i].x << "," << waypoints[i].y << ")";
+        }
+        cout << endl;
+        return waypoints;
+    }
+
+    inline vector<Point2f> findpathAsWaypoints(int xStart, int yStart, int xTarget, int yTarget){
+        return pathToWorld(simplifyPath(findpath(xStart, yStart, xTarget, yTarget)));
+    }
 
 };
 
