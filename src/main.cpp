@@ -185,13 +185,8 @@ int main(){
 		laserScanner.simScan(lines);
 
 	    // Call this whenever new scandata is available
-<<<<<<< HEAD
-	    map.updateMap(&laserScanner, maxLSDist);
-	    mapToPlot = map.mapData*127;
-=======
         gridMap.updateMap(&laserScanner, maxLSDist);
         Mat mapToPlot = gridMap.mapData*127;
->>>>>>> 3d94735bdfc1c9e7e8a5485652c1f8ade18df679
 	    // This following needs only to be done when a new route should be planned
         gridMap.transform();	// Dialate Map and Compute Distance Transform
         Point wayPointCell = gridMap.determineNextWaypointCell(&laserScanner);
@@ -218,35 +213,21 @@ int main(){
         
         // cout << "waypoints:\n" << waypoints << endl;
         }
-<<<<<<< HEAD
-        
-        map.dialatedMap.convertTo(mapToDraw,CV_8UC3);
-=======
 
-        gridMap.dialatedMap.convertTo(mapToDraw,CV_8UC3);
->>>>>>> 3d94735bdfc1c9e7e8a5485652c1f8ade18df679
-        cvtColor(mapToDraw, mapToDraw, COLOR_GRAY2BGR);
-        drawExaminedNotes(mapToDraw);
-        drawPath(mapToDraw, path);
-
-        // imshow( "mapDistance", 100/map.distanceMap);
-<<<<<<< HEAD
-        resize(mapToPlot, mapToPlot, Size(map.height*2, map.width*2), 0, 0, INTER_NEAREST);
-        resize(mapToDraw, mapToDraw, Size(map.height*2, map.width*2), 0, 0, INTER_NEAREST);
         if(ii % 30 == 0){
+            gridMap.dialatedMap.convertTo(mapToDraw,CV_8UC3);
+            cvtColor(mapToDraw, mapToDraw, COLOR_GRAY2BGR);
+            drawExaminedNotes(mapToDraw);
+            drawPath(mapToDraw, path);
+            resize(mapToPlot, mapToPlot, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);
+            resize(mapToDraw, mapToDraw, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);
+                    
             imshow( "mapData", mapToPlot);
             imshow( "Path", mapToDraw);
             waitKey(1);
         }
 
-=======
-        resize(mapToPlot, mapToPlot, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);
-        resize(mapToDraw, mapToDraw, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);
 
-        imshow( "mapData", mapToPlot);
-        imshow( "Path", mapToDraw);
-        waitKey(1);
->>>>>>> 3d94735bdfc1c9e7e8a5485652c1f8ade18df679
         }
 
         // Controller
@@ -255,10 +236,7 @@ int main(){
         // Robot Simulation
         pose = pf.kinupdate(pose, pf.uw, pf.T);
         time += pf.T;
-<<<<<<< HEAD
 
-=======
->>>>>>> 3d94735bdfc1c9e7e8a5485652c1f8ade18df679
 	}
     cout << "Number of steps in simulation = " << nstp << endl;
 
