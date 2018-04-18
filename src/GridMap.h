@@ -24,7 +24,7 @@ using namespace cv;
 
 
 #ifndef USE_CV_DISTANCE_TRANSFORM
-#define USE_CV_DISTANCE_TRANSFORM
+// #define USE_CV_DISTANCE_TRANSFORM
 #endif
 
 class LaserScanner {
@@ -334,6 +334,11 @@ public:
         this->yoffset = yoffset;
     }
 
+    void setWrapMap(bool wrapMap){
+        this->wrapMap = wrapMap;
+        astar.wrapMap = wrapMap;
+    }
+
     void resize(float widthInMeters, float heightInMeters, float cellSize){
         this->cellSize = cellSize;
         this->height = ceil(heightInMeters/cellSize);
@@ -345,7 +350,7 @@ public:
         invDialatedMap.create(height,width,CV_8SC1);
         distanceMap_32F.create(height,width,CV_32F);
         distanceMap.create(height,width,CV_8SC1);
-        astar = Astar(height, width);
+        astar.resize(height, width);
         astar.wrapMap = wrapMap;
         this->clear();
     }
@@ -366,6 +371,7 @@ public:
     void clear(){
         mapData.setTo(-1);
         dialatedMap.setTo(0);
+        distanceMap.setTo(0);
         astar.clear();
     }
     
@@ -609,9 +615,9 @@ public:
 
         // Convert scan from world cartesian coordinates to cell position
         for(int i=0; i<scan->nScanLines; i++){
+            float& rho = scanPolar(1,i);
             float& xs = scanWorld(0,i);
             float& ys = scanWorld(1,i);
-            float& rho = scanPolar(1,i);
             Point cell = findCell(xs, ys);
             
             // Clear cells using bresenham's algorithm
@@ -623,7 +629,7 @@ public:
                 setCell(pointsToClear[ii].x, pointsToClear[ii].y, 0, clearMode);
             }
 
-            if(rho <= maxLSDist) pointsToFill.push_back(cell);
+            if(0.050 < rho && rho <= maxLSDist) pointsToFill.push_back(cell);
         }
 
         for(uint ii=0; ii<pointsToFill.size(); ii++){
@@ -661,7 +667,7 @@ public:
                     float& ys  = scanWorld(1,k);
                     // float& phi = scanPolar(0,k);
                     float& rho = scanPolar(1,k);
-                    if(rho < (biggestDistanceInCells+1)*cellSize) continue;
+                    if(rho < (biggestDistanceInCells+2)*cellSize) continue;
                     Point cell = findCell(xs, ys);
                     // int obstdist = distanceMapAt(cell.x,cell.y);
 
@@ -707,6 +713,8 @@ public:
                 if(dialatedMapAt(x,y) > 0) node->type = NODE_TYPE_OBSTACLE;
                 #ifdef USE_CV_DISTANCE_TRANSFORM
                 node->obstdist = distanceMapAt(x,y);
+                #else
+                node->obstdist = 0;
                 #endif
             }
         }

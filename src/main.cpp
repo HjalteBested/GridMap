@@ -7,6 +7,7 @@
 
 //#include <iostream>
 //#include <Eigen/Dense>
+#define USE_CV_DISTANCE_TRANSFORM
 
 #include "GridMap.h"
 #include "RobotMPC.h"
@@ -161,7 +162,7 @@ int main(){
     Vector3f pose; pose << 0.26, 0, 0;
     
 
-    int nstp=2400;
+    int nstp=2600;
     float time=0;
 
 

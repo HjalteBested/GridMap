@@ -20,7 +20,6 @@ using namespace std;
 using namespace cv;
 #endif
 
-const int ALLOW_DIAGONAL_PASSTHROUGH = 1;
 const int NODE_FLAG_CLOSED = -1;
 const int NODE_FLAG_UNDEFINED = 0;
 const int NODE_FLAG_OPEN = 1;
@@ -92,10 +91,10 @@ public:
 
 	int G_DIRECT_COST   = 1000; /// Cost of moving to a direct neighbor cell 
 	int G_DIAGONAL_COST = 1414;	/// Cost of moving to a diagonal neighbor cell, i.e. ≈ G_DIRECT_COST * sqrt(2);
-	int H_AMITGAIN = 2;			/// Gain for the tie-breaker. Zero means it is disabled completely.
+    int H_AMITGAIN = 2;			/// Gain for the tie-breaker. Zero means it is disabled completely.
 	int G_OBST_COST = 1000;		/// The obstacle distance cost is: G_OBST_COST/obstdist.
 	int G_OBST_THRESH = 5;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
-
+    int ALLOW_DIAGONAL_PASSTHROUGH = 1;
 
 	MapSize mapSize;				/// Class for storing the size of the Map
 	vector<MapNode> mapData;		/// The actual map data
@@ -106,20 +105,25 @@ public:
 	MapNode *startNode;
 	MapNode *targetNode;
 	bool wrapMap = true;
+    bool reachedTarget=false;
 	
 	Astar() { }
 
     Astar(unsigned long width, unsigned long height) {
-    	this->mapSize = MapSize(width,height);
-    	this->mapData.resize(mapSize.size);
-    	for(int y=0; y<mapSize.height; y++){
-    		for(int x=0; x<mapSize.width; x++){
-    			MapNode * node = this->mapAt(x,y);
-    			node->x = x;
-    			node->y = y;
-    		}
-    	}
-    	if(DEBUG) cout << "MapSize(" << mapSize.width << ", " << mapSize.height << ", " << mapSize.size << ")" << endl;
+        this->resize(width,height);
+    }
+
+    void resize(unsigned long width, unsigned long height){
+        this->mapSize = MapSize(width,height);
+        this->mapData.resize(mapSize.size);
+        for(int y=0; y<mapSize.height; y++){
+            for(int x=0; x<mapSize.width; x++){
+                MapNode * node = this->mapAt(x,y);
+                node->x = x;
+                node->y = y;
+            }
+        }
+        if(DEBUG) cout << "MapSize(" << mapSize.width << ", " << mapSize.height << ", " << mapSize.size << ")" << endl;
     }
 
 	/**	The standard heuristic is the Manhattan distance. 
@@ -261,6 +265,7 @@ public:
 	/** Find the path with the minimal total cost. The actual A* search!  */
 	vector<MapNode *> findpath(unsigned long const& maxIter = 1e5) {
 	    path.clear();
+        reachedTarget = false;
 	    // if(startNode !=0 || targetNode != 0 || startNode != targetNode) return path;
 
 	    if(DEBUG) cout << "Finding started!" << endl;
@@ -272,7 +277,7 @@ public:
 	        node = openList.at(0);
 
 	        for (int i = 0, max = openList.size(); i < max; i++) {
-	            if (openList[i]->f() <= node->f()) {
+                if (openList[i]->f() <= node->f() && openList[i]->h < node->h) {
 	                node = openList[i];
 	            }
 	        }
@@ -289,6 +294,7 @@ public:
 	        if (node == targetNode) {
 	            if(DEBUG) cout << "Reached the target node." << endl;
 	            reversedPtr = node;
+                reachedTarget = true;
 	            break;
 	        }
 	        if(iteration++ > maxIter) {
