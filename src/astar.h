@@ -8,7 +8,17 @@
 #ifndef ASTAR_H
 #define ASTAR_H
 
+
+#include <iostream>
+#include <cmath>
+#include <vector>
+
 using namespace std;
+
+#ifdef ASTAR_USE_OPENCV
+#include <opencv2/core/core.hpp>
+using namespace cv;
+#endif
 
 const int ALLOW_DIAGONAL_PASSTHROUGH = 1;
 const int NODE_FLAG_CLOSED = -1;
@@ -91,6 +101,8 @@ public:
 	vector<MapNode> mapData;		/// The actual map data
 	vector<MapNode *> openList; 	
 	vector<MapNode *> closedList; 	/// The closedList is not really needed for the algorithm to run, but is handy for visualising which nodes was examined in the path determination
+	vector<MapNode *> path;
+
 	MapNode *startNode;
 	MapNode *targetNode;
 	bool wrapMap = true;
@@ -245,9 +257,10 @@ public:
 		if(node != 0) node->obstdist = obstdist;
 	}
 
+
 	/** Find the path with the minimal total cost. The actual A* search!  */
-	vector<MapNode *> findpath(unsigned long maxIter = 1e4) {
-	    vector<MapNode *> path;
+	vector<MapNode *> findpath(unsigned long const& maxIter = 1e5) {
+	    path.clear();
 	    // if(startNode !=0 || targetNode != 0 || startNode != targetNode) return path;
 
 	    if(DEBUG) cout << "Finding started!" << endl;
@@ -323,7 +336,8 @@ public:
 	    return path;
 	}
 
-	vector<MapNode *> findpath(int xStart, int yStart, int xTarget, int yTarget, unsigned long maxIter=1e4){
+	/** Find the path with the minimal total cost. The actual A* search!  */
+	vector<MapNode *> findpath(int const& xStart, int const& yStart, int const& xTarget, int const& yTarget, unsigned long const& maxIter=1e5){
 		// Set StartNode
         putNode(MapNode(xStart, yStart, 0, NODE_TYPE_START));
         startNode = mapAt(xStart, yStart);
@@ -340,10 +354,10 @@ public:
         return findpath(maxIter);
 	}
 
-	vector<MapNode *> simplifyPath(vector<MapNode *> path){
-        // if(path.size() < 3) return path;
+	/** Simplify the path by removing all nodes that are on a straight line, i.e. only return corners.  */
+	vector<MapNode *> simplifyPath(vector<MapNode *> const& path){
+        if(path.size() < 3) return path;
         vector<MapNode *> newpath;
-
         // Make New Path - points are lying on the same line as the previous and next, throw it away! 
         newpath.push_back(path.front());
         for(int i=1; i<(path.size()-1); i++){
@@ -355,11 +369,10 @@ public:
             int dx2 = P0->x - P2->x;
             int dy2 = P0->y - P2->y;
             int cross = dx1*dy2 - dx2*dy1;
-            if( cross<0 ) cross = -cross;
-            if( cross > 0) newpath.push_back(P1);
+            if( abs(cross) > 0) newpath.push_back(P1);
         }
         newpath.push_back(path.back());
-        
+
         /*
         cout << "simplifyPath:\n";
         for(int i=0; i<newpath.size(); i++){
@@ -380,17 +393,29 @@ public:
 	vector<MapNode *> neighbors(MapNode *node){
 	    vector<MapNode *> available;
 	    MapNode *_node;
-	    if ((_node = mapAt(node->x - 1, node->y)) != 0 && node->x-1 == _node->x && node->y == _node->y) available.push_back(_node); // L
-	    if ((_node = mapAt(node->x, node->y - 1)) != 0 && node->x == _node->x   && node->y-1 == _node->y) available.push_back(_node); // T
-	    if ((_node = mapAt(node->x + 1, node->y)) != 0 && node->x+1 == _node->x && node->y == _node->y) available.push_back(_node); // R
-	    if ((_node = mapAt(node->x, node->y + 1)) != 0 && node->x == _node->x   && node->y+1 == _node->y) available.push_back(_node); // B
-
-	    if (ALLOW_DIAGONAL_PASSTHROUGH) {
-	        if ((_node = mapAt(node->x - 1, node->y - 1)) != 0 && node->x-1 == _node->x && node->y-1 == _node->y) available.push_back(_node); // LT
-	        if ((_node = mapAt(node->x + 1, node->y - 1)) != 0 && node->x+1 == _node->x && node->y-1 == _node->y) available.push_back(_node); // RT
-	        if ((_node = mapAt(node->x + 1, node->y + 1)) != 0 && node->x+1 == _node->x && node->y+1 == _node->y) available.push_back(_node); // RB
-	        if ((_node = mapAt(node->x - 1, node->y + 1)) != 0 && node->x-1 == _node->x && node->y+1 == _node->y) available.push_back(_node); // LB
-	    }
+	    if(wrapMap){
+		    if ((_node = mapAt(node->x - 1, node->y)) != 0 && node->x-1 == _node->x && node->y   == _node->y) available.push_back(_node); // L
+		    if ((_node = mapAt(node->x, node->y - 1)) != 0 && node->x 	== _node->x && node->y-1 == _node->y) available.push_back(_node); // T
+		    if ((_node = mapAt(node->x + 1, node->y)) != 0 && node->x+1 == _node->x && node->y   == _node->y) available.push_back(_node); // R
+		    if ((_node = mapAt(node->x, node->y + 1)) != 0 && node->x 	== _node->x && node->y+1 == _node->y) available.push_back(_node); // B
+		    if (ALLOW_DIAGONAL_PASSTHROUGH) {
+		        if ((_node = mapAt(node->x - 1, node->y - 1)) != 0 && node->x-1 == _node->x && node->y-1 == _node->y) available.push_back(_node); // LT
+		        if ((_node = mapAt(node->x + 1, node->y - 1)) != 0 && node->x+1 == _node->x && node->y-1 == _node->y) available.push_back(_node); // RT
+		        if ((_node = mapAt(node->x + 1, node->y + 1)) != 0 && node->x+1 == _node->x && node->y+1 == _node->y) available.push_back(_node); // RB
+		        if ((_node = mapAt(node->x - 1, node->y + 1)) != 0 && node->x-1 == _node->x && node->y+1 == _node->y) available.push_back(_node); // LB
+		    }
+		} else {
+			if ((_node = mapAt(node->x - 1, node->y)) != 0) available.push_back(_node); // L
+		    if ((_node = mapAt(node->x, node->y - 1)) != 0) available.push_back(_node); // T
+		    if ((_node = mapAt(node->x + 1, node->y)) != 0) available.push_back(_node); // R
+		    if ((_node = mapAt(node->x, node->y + 1)) != 0) available.push_back(_node); // B
+		    if (ALLOW_DIAGONAL_PASSTHROUGH) {
+		        if ((_node = mapAt(node->x - 1, node->y - 1)) != 0) available.push_back(_node); // LT
+		        if ((_node = mapAt(node->x + 1, node->y - 1)) != 0) available.push_back(_node); // RT
+		        if ((_node = mapAt(node->x + 1, node->y + 1)) != 0) available.push_back(_node); // RB
+		        if ((_node = mapAt(node->x - 1, node->y + 1)) != 0) available.push_back(_node); // LB
+			}
+		}
 	    return available;
 	}
 
@@ -404,6 +429,53 @@ public:
 	    }
 	}
 
+	MapNode wrapNode(MapNode node, int cols, int rows){
+	    while(node.x < 0)       node.x += cols;
+	    while(node.x >= cols)   node.x -= cols;
+	    while(node.y < 0)       node.y += rows;
+	    while(node.y >= rows)   node.y -= rows;
+	    return node;
+	}
+
+	#ifdef ASTAR_USE_OPENCV
+	/** Drawing in enabled if #include <opencv2/core.hpp> */
+	void drawPath(Mat &mapToDraw, bool drawExaminedNotes) {
+	    if(drawExaminedNotes){
+	        // Draw Open List
+	        for (uint i = 0; i < openList.size(); i++) {
+	            MapNode node = wrapNode(*openList[i], mapToDraw.cols, mapToDraw.rows);
+	            mapToDraw.at<Vec3b>(node.y, node.x) = cv::Vec3b(210, 210, 210);
+	        }
+	        // Draw Closed List
+	        for (uint i = 0; i < closedList.size(); i++) {
+	            MapNode node = wrapNode(*closedList[i], mapToDraw.cols, mapToDraw.rows);
+	            mapToDraw.at<Vec3b>(node.y, node.x) = cv::Vec3b(210, 210, 210);
+	        }
+	    }
+
+	    // Convert to HSV colerspace
+	    cvtColor(mapToDraw, mapToDraw, COLOR_BGR2HSV);
+
+	    // DrawPath
+	    for (int i=0; i<path.size(); i++) {
+	        MapNode node = wrapNode(*path[i], mapToDraw.cols, mapToDraw.rows);
+	        mapToDraw.at<Vec3b>(node.y, node.x) = Vec3b(20 + (1.0 - ((double) i / path.size())) * 80, 200, 255);
+	    }
+
+	    // Convert back to BGR colerspace
+	    cvtColor(mapToDraw, mapToDraw, COLOR_HSV2BGR);
+	    
+	    // Draw Start Node (BLUE)
+	    if(startNode && startNode->y >= 0 && startNode->y < mapToDraw.rows && startNode->x >= 0 && startNode->x < mapToDraw.cols){
+	        mapToDraw.at<Vec3b>(startNode->y, startNode->x) = Vec3b(255, 0, 0);
+	    }
+
+	    // Draw Target Node (RED)
+	    if(targetNode && targetNode->y >= 0 && targetNode->y < mapToDraw.rows && targetNode->x >= 0 && targetNode->x < mapToDraw.cols){
+	        mapToDraw.at<Vec3b>(targetNode->y, targetNode->x) = Vec3b(0, 0, 255);
+	    }
+	}
+	#endif
 
 };
 

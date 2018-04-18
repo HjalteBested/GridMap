@@ -1,6 +1,6 @@
 
 
-//#include <opencv2/core.hpp>
+#include <opencv2/core.hpp>
 //#include <opencv2/imgproc.hpp>
 //#include <opencv2/imgcodecs.hpp>
 //#include <opencv2/highgui.hpp>
@@ -22,12 +22,8 @@ GridMap gridMap;
 LaserScanner laserScanner;
 RobotPathFollowMPC pf = RobotPathFollowMPC();
 
-Mat mapToPlot;
+// Mat mapToPlot;
 Mat mapToDraw;
-void drawPath(Mat &map, vector<MapNode *> path);
-void drawExaminedNotes(Mat &mapToDraw);
-vector<MapNode *> simplifyPath(vector<MapNode *> path);
-
 
 int main(){
 
@@ -67,7 +63,7 @@ int main(){
     */
 
     // Walls
-
+    /*
     MatrixXf lines(4,36);
     lines.col(0) << 0,    0.25, 3.5,    0.25;
     lines.col(1) << 0,   -0.25,   3,   -0.25;
@@ -109,7 +105,7 @@ int main(){
     lines.col(34) << 2.9, -2.8,  2.8, -3.1;
     lines.col(35) << 2.8, -3.1,  2.4, -2.8;
 
-    /*
+    */
 
     MatrixXf lines(4,31);
     lines.col(0) << 0,    0.5,  8,      0.5;
@@ -144,7 +140,7 @@ int main(){
     lines.col(28) << 1,   -2,    8,      -2.5;
     lines.col(29) << 8,   -2.5,  8,      -4;
     lines.col(30) << 7,   -3,    7,      -4;
-    */
+    
     cout << "lines:\n" << lines << endl;
 
     // Setup the map
@@ -159,15 +155,13 @@ int main(){
 
 
 	// Create OpenCV Windows
-    namedWindow( "mapData", WINDOW_AUTOSIZE );
     namedWindow( "Path", WINDOW_AUTOSIZE );
-	moveWindow("mapData", 0,0);
-    moveWindow("Path", 2*gridMap.width,0);
+    moveWindow("Path", 0,0);
 
     Vector3f pose; pose << 0.26, 0, 0;
     
 
-    int nstp=2800;
+    int nstp=2400;
     float time=0;
 
 
@@ -175,7 +169,7 @@ int main(){
     for(int ii=0; ii<nstp; ii++){
         pose(2) = pf.wrapToPi(pose(2));
 
-        if(ii % 10 == 0){
+        if(ii % 5 == 0){
         // Set pose of the scanner
         laserScanner.pose = pose;
         cout << "scanpose: (" << pose(0) << "," << pose(1) << "," << pose(2) << ")" << endl;    
@@ -186,7 +180,7 @@ int main(){
 
 	    // Call this whenever new scandata is available
         gridMap.updateMap(&laserScanner, maxLSDist);
-        Mat mapToPlot = gridMap.mapData*127;
+
 	    // This following needs only to be done when a new route should be planned
         gridMap.transform();	// Dialate Map and Compute Distance Transform
         Point wayPointCell = gridMap.determineNextWaypointCell(&laserScanner);
@@ -195,7 +189,7 @@ int main(){
 
         Point robotCell = gridMap.worldToMap(pose(0),pose(1));
 
-        vector<MapNode *> path    = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 6000);
+        vector<MapNode *> path    = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 1e4);
         if(path.size() > 1){
             vector<MapNode *> newpath = gridMap.simplifyPath(path);
             vector<Point2f> waypoints = gridMap.pathToWorld(newpath);
@@ -215,14 +209,14 @@ int main(){
         }
 
         if(ii % 30 == 0){
-            gridMap.dialatedMap.convertTo(mapToDraw,CV_8UC3);
+            mapToDraw = (gridMap.mapData+1);
+            mapToDraw.convertTo(mapToDraw,CV_8UC3);
+            mapToDraw *= 127;
+            mapToDraw += gridMap.dialatedMap * 0.15;
             cvtColor(mapToDraw, mapToDraw, COLOR_GRAY2BGR);
-            drawExaminedNotes(mapToDraw);
-            drawPath(mapToDraw, path);
-            resize(mapToPlot, mapToPlot, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);
-            resize(mapToDraw, mapToDraw, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);
-                    
-            imshow( "mapData", mapToPlot);
+            gridMap.astar.drawPath(mapToDraw, true);
+
+            resize(mapToDraw, mapToDraw, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);                    
             imshow( "Path", mapToDraw);
             waitKey(1);
         }
@@ -245,54 +239,6 @@ int main(){
 	
 
     return 0;
-}
-
-
-
-MapNode wrapNode(MapNode node, int cols, int rows){
-    while(node.x < 0)       node.x += cols;
-    while(node.x >= cols)   node.x -= cols;
-    while(node.y < 0)       node.y += rows;
-    while(node.y >= rows)   node.y -= rows;
-    return node;
-}
-
-void drawPath(Mat &mapToDraw, vector<MapNode *> path) {
-    cvtColor(mapToDraw, mapToDraw, COLOR_BGR2HSV);
-
-    // DrawPath
-    for (int i=0; i<path.size(); i++) {
-        MapNode node = wrapNode(*path[i],gridMap.mapData.cols,gridMap.mapData.rows);
-        mapToDraw.at<Vec3b>(node.y, node.x) = Vec3b(20 + (1.0 - ((double) i / path.size())) * 80, 200, 255);
-    }
-
-    cvtColor(mapToDraw, mapToDraw, COLOR_HSV2BGR);
-    
-    // Draw StartNode
-    MapNode *startNode = gridMap.astar.startNode;
-    if(startNode && startNode->y >= 0 && startNode->y < mapToDraw.rows && startNode->x >= 0 && startNode->x < mapToDraw.cols){
-        mapToDraw.at<Vec3b>(startNode->y, startNode->x) = Vec3b(255, 0, 0);
-    }
-
-    // Draw EndNode
-    MapNode *targetNode = gridMap.astar.targetNode;
-    if(targetNode && targetNode->y >= 0 && targetNode->y < mapToDraw.rows && targetNode->x >= 0 && targetNode->x < mapToDraw.cols){
-        mapToDraw.at<Vec3b>(targetNode->y, targetNode->x) = Vec3b(0, 0, 255);
-    }
-
-}
-
-void drawExaminedNotes(Mat &mapToDraw) {
-    // Draw Open List
-    for (uint i = 0; i < gridMap.astar.openList.size(); i++) {
-        MapNode node = wrapNode(*gridMap.astar.openList[i],mapToDraw.cols,mapToDraw.rows);
-        mapToDraw.at<Vec3b>(node.y, node.x) = Vec3b(210, 210, 210);
-    }
-    // Draw Closed List
-    for (uint i = 0; i < gridMap.astar.closedList.size(); i++) {
-        MapNode node = wrapNode(*gridMap.astar.closedList[i],mapToDraw.cols,mapToDraw.rows);
-        mapToDraw.at<Vec3b>(node.y, node.x) = Vec3b(210, 210, 210);
-    }
 }
 
 
