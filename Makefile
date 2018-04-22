@@ -1,7 +1,7 @@
 # When clock skew appears uncomment this line
 # $(shell find . -exec touch {} \;)
 
-TARGET_EXEC := map.app
+TARGET_EXEC := gridMap.app
 
 BUILD_DIR := ./build
 SRC_DIRS  := ./src
@@ -38,10 +38,12 @@ $(BUILD_DIR)/%.cpp.o: %.cpp
 .PHONY: clean
 clean:
 	$(RM) -r $(BUILD_DIR) $(TARGET_EXEC) ./Documentation	
-
+	#$(RM) -r ./src/RobotMPC.*
 doc:
 	doxygen Doxyfile
 
+lnk:
+	ln -f -n ../RobotMPC/src/RobotMPC.* ./src
 -include $(DEPS)
 
 MKDIR_P := mkdir -p

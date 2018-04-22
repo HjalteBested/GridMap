@@ -8,7 +8,6 @@
 #ifndef ASTAR_H
 #define ASTAR_H
 
-
 #include <iostream>
 #include <cmath>
 #include <vector>
@@ -24,6 +23,7 @@ const int NODE_FLAG_CLOSED = -1;
 const int NODE_FLAG_UNDEFINED = 0;
 const int NODE_FLAG_OPEN = 1;
 
+const int NODE_TYPE_UNKNOWN = -1;
 const int NODE_TYPE_ZERO = 0;
 const int NODE_TYPE_OBSTACLE = 1;
 const int NODE_TYPE_START = 2;
@@ -91,6 +91,7 @@ public:
 
 	int G_DIRECT_COST   = 1000; /// Cost of moving to a direct neighbor cell 
 	int G_DIAGONAL_COST = 1414;	/// Cost of moving to a diagonal neighbor cell, i.e. ≈ G_DIRECT_COST * sqrt(2);
+	int G_UNKNOWN_COST = 10;
     int H_AMITGAIN = 2;			/// Gain for the tie-breaker. Zero means it is disabled completely.
 	int G_OBST_COST = 1000;		/// The obstacle distance cost is: G_OBST_COST/obstdist.
 	int G_OBST_THRESH = 5;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
@@ -185,12 +186,17 @@ public:
 		if(node2->obstdist > 0 && node2->obstdist < G_OBST_THRESH){
 			obstCost = ceil(G_OBST_COST/node2->obstdist);
 		}
+		int unknowncost=0;
+	    if(node2->type == NODE_TYPE_UNKNOWN) unknowncost = G_UNKNOWN_COST;
+
 	    if(node1->x != node2->x && node1->y != node2->y) 
-	    	return G_DIAGONAL_COST	+ 2*obstCost;
+	    	return G_DIAGONAL_COST + 2*obstCost + unknowncost; 	// if diagonal movement
 	    else 
-	    	return G_DIRECT_COST	+ obstCost;
+	    	return G_DIRECT_COST + obstCost + unknowncost;		// if direct movement
 	}
 
+	/** Clear all Nodes in the open and closed list, empty the lists, set startNode=NULL and targetNode = NULL. 
+	 *	This is a cheap way of preparing the object to compute a totally new route as no memory reallocation is needed. */
 	void clear(){		
 		// Clear all nodes in openList
 		for(int i=0; i<openList.size(); i++){
@@ -226,7 +232,7 @@ public:
     	return &mapData[y * mapSize.width + x];
 	}
 
-	/** Put a note into the map, the location if defined by the node itself! */
+	/** Put a note into the map, the location is defined by the node itself! */
 	void putNode(MapNode node){
 		int cols = mapSize.width;
 		int rows = mapSize.height;
@@ -246,19 +252,27 @@ public:
 		}
 	}
 
+	/** Call clear() on the node at (x,y) */
 	void clearNodeAt(int x, int y){
 		MapNode * node = mapAt(x,y);
-		if(node != 0) node->clear();
+		if(node != NULL) node->clear();
 	}
 
+	/** Set the node type: 
+	 *	NODE_TYPE_UNKNOWN = -1;
+	 *	NODE_TYPE_ZERO = 0;
+	 *	NODE_TYPE_OBSTACLE = 1;
+	 *	NODE_TYPE_START = 2;
+	 *	NODE_TYPE_END = 3; */
 	void setNodeTypeAt(int x, int y, int type){
 		MapNode * node = mapAt(x,y);
-		if(node != 0) node->type = type;
+		if(node != NULL) node->type = type;
 	}
 
+	/** Set the distance to the nearest obstacle cell */
 	void setObstDistAt(int x, int y, int obstdist){
 		MapNode * node = mapAt(x,y);
-		if(node != 0) node->obstdist = obstdist;
+		if(node != NULL) node->obstdist = obstdist;
 	}
 
 
@@ -299,6 +313,7 @@ public:
 	        }
 	        if(iteration++ > maxIter) {
 	        	cout << "MaxIteration Reached. Returning" << endl;
+	        	return path;
 	            reversedPtr = node;
 	            break;
 	        }
@@ -360,38 +375,44 @@ public:
         return findpath(maxIter);
 	}
 
-	/** Simplify the path by removing all nodes that are on a straight line, i.e. only return corners.  */
+	/** Simplify the path by removing all nodes that are on a straight line, i.e. keep only the corner nodes. */
 	vector<MapNode *> simplifyPath(vector<MapNode *> const& path){
+		const bool DEBUG = false;
         if(path.size() < 3) return path;
         vector<MapNode *> newpath;
+
         // Make New Path - points are lying on the same line as the previous and next, throw it away! 
         newpath.push_back(path.front());
         for(int i=1; i<(path.size()-1); i++){
             MapNode * P0 = path[i-1];
             MapNode * P1 = path[i];
             MapNode * P2 = path[i+1];
-            int dx1 = P1->x - P2->x;
-            int dy1 = P1->y - P2->y;
-            int dx2 = P0->x - P2->x;
-            int dy2 = P0->y - P2->y;
-            int cross = dx1*dy2 - dx2*dy1;
-            if( abs(cross) > 0) newpath.push_back(P1);
+            int dx01 = P1->x - P0->x;
+            int dy01 = P1->y - P0->y;
+            int dx12 = P2->x - P1->x;
+            int dy12 = P2->y - P1->y;
+            if(dx01 == 0 && dy01 == 0) continue;
+            if( !(dx01 == dx12 && dy01 == dy12) ) newpath.push_back(P1);
         }
         newpath.push_back(path.back());
 
-        /*
-        cout << "simplifyPath:\n";
-        for(int i=0; i<newpath.size(); i++){
-            cout << "->(" << newpath[i]->x << "," << newpath[i]->y << ")";
-        }
-        cout << endl;
-        
-        for(int i=0; i<path.size(); i++){
-            cout << "->(" << path[i]->x << "," << path[i]->y << ")";
-        }
-        cout << endl;
-        */
+		if(DEBUG && false){
+			cout << "path:--";
+	        for(int i=0; i<path.size(); i++){
+	            cout << "->(" << path[i]->x << "," << path[i]->y << ")";
+	        }
+	        cout << endl;
+	    }
 
+	    if(DEBUG){
+	        cout << "newpath:--";
+	        for(int i=0; i<newpath.size(); i++){
+	            cout << "->(" << newpath[i]->x << "," << newpath[i]->y << ")";
+	        }
+	        cout << endl;
+    	}
+
+		
         return newpath;
     }
 
@@ -435,6 +456,7 @@ public:
 	    }
 	}
 
+	/** Return a node with wrapped coordinates */
 	MapNode wrapNode(MapNode node, int cols, int rows){
 	    while(node.x < 0)       node.x += cols;
 	    while(node.x >= cols)   node.x -= cols;
@@ -443,9 +465,23 @@ public:
 	    return node;
 	}
 
-	#ifdef ASTAR_USE_OPENCV
-	/** Drawing in enabled if #include <opencv2/core.hpp> */
-	void drawPath(Mat &mapToDraw, bool drawExaminedNotes) {
+	#ifdef ASTAR_USE_OPENCV // To allow using astar without having opencv included
+	/** Draw nodes as red circles. Intended for showing the simplified path nodes, enabled if ASTAR_USE_OPENCV is defined */
+	void drawNodes(Mat& mapToDraw, vector<MapNode *> path, const Scalar& color=Scalar(0,0,255), int thickness=-1){
+		int const& N = path.size();
+		vector<Point> points(N);
+		Point point;
+		MapNode node;
+        for(int i=0; i<N; i++){
+        	node = wrapNode(*path[i], mapToDraw.cols, mapToDraw.rows);
+            point.x = node.x;
+            point.y = node.y;
+            circle(mapToDraw, point, 1, color, thickness);
+        }
+	}
+
+	/** Drawing is enabled if ASTAR_USE_OPENCV is defined */
+	void drawPath(Mat &mapToDraw, bool drawExaminedNotes=true) {
 	    if(drawExaminedNotes){
 	        // Draw Open List
 	        for (uint i = 0; i < openList.size(); i++) {
@@ -482,9 +518,7 @@ public:
 	    }
 	}
 	#endif
-
 };
-
 
 #endif
 

@@ -9,7 +9,7 @@
 //#include <Eigen/Dense>
 #define USE_CV_DISTANCE_TRANSFORM
 
-#include "GridMap.h"
+#include "GridMap.hpp"
 #include "RobotMPC.h"
 // #include <opencv2/imgcodecs/imgcodecs.hpp>
 
@@ -30,9 +30,9 @@ int main(){
 
     // Design MPC - Compute controller gains for the horizon
     int N = 100;
-    float Qth = 0.05;
-    float Qdu = 0.005;
-    float Qu =  0.001;
+    float Qth = 0.04;
+    float Qdu = 0.0005;
+    float Qu =  0.0008;
     pf.initMPC(N);
     pf.design(Qth, Qdu, Qu);
 
@@ -48,7 +48,7 @@ int main(){
     float w = 10;
     float h = 10;
     float cellSize = 0.03;
-    float maxLSDist = 3.5f;
+    float maxLSDist = 3.8f;
 
 	// Define Lines in cartesian space
     // MatrixXf lines(4,5);
@@ -108,7 +108,7 @@ int main(){
 
     */
 
-    MatrixXf lines(4,31);
+    MatrixXd lines(4,31);
     lines.col(0) << 0,    0.5,  8,      0.5;
     lines.col(1) << 0,   -0.45, 5,      -0.45;
     lines.col(2) << 0,   -0.55, 7,      -0.55;
@@ -160,11 +160,10 @@ int main(){
     moveWindow("Path", 0,0);
 
     Vector3f pose; pose << 0.26, 0, 0;
-    
+    //pose << 1.53779,-2.33605,-0.0965727;
 
-    int nstp=2600;
+    int nstp=2500;
     float time=0;
-
 
     // Simulation
     for(int ii=0; ii<nstp; ii++){
@@ -184,16 +183,21 @@ int main(){
 
 	    // This following needs only to be done when a new route should be planned
         gridMap.transform();	// Dialate Map and Compute Distance Transform
-        Point wayPointCell = gridMap.determineNextWaypointCell(&laserScanner);
+        Point wayPointCell = gridMap.determineNextWaypointCell(&laserScanner,2.5);
+        // Point wayPointCell = gridMap.worldToCell(3.5,-4);
         // Vector2f wayPoint = map.determineNextWaypoint(&laserScanner);
         // cout << "wayPointCell = " << wayPointCell << endl;
 
-        Point robotCell = gridMap.worldToMap(pose(0),pose(1));
+        Point robotCell = gridMap.worldToCell(pose(0),pose(1));
 
-        vector<MapNode *> path    = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 1e4);
-        if(path.size() > 1){
-            vector<MapNode *> newpath = gridMap.simplifyPath(path);
-            vector<Point2f> waypoints = gridMap.pathToWorld(newpath);
+        vector<MapNode *> path = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 5e5);
+        bool newPathFound = path.size() > 1;
+        vector<MapNode *> newpath;
+        vector<Point2f> waypoints;
+        if(newPathFound){
+            newpath = gridMap.simplifyPath(path);
+            waypoints = gridMap.pathToWorld(newpath);
+            // newpath = gridMap.simplifyPath(newpath);
         
             int nWayPoints = waypoints.size();
             // if(nWayPoints > 5) nWayPoints = 5;
@@ -209,15 +213,19 @@ int main(){
         // cout << "waypoints:\n" << waypoints << endl;
         }
 
-        if(ii % 30 == 0){
+
+
+        if(ii % 30 == 0 && newPathFound){
             mapToDraw = (gridMap.mapData+1);
             mapToDraw.convertTo(mapToDraw,CV_8UC3);
             mapToDraw *= 127;
             mapToDraw += gridMap.dialatedMap * 0.15;
+            
             cvtColor(mapToDraw, mapToDraw, COLOR_GRAY2BGR);
-            gridMap.astar.drawPath(mapToDraw, true);
+            gridMap.astar.drawPath(mapToDraw);
+            gridMap.astar.drawNodes(mapToDraw, newpath);
 
-            resize(mapToDraw, mapToDraw, Size(gridMap.height*2, gridMap.width*2), 0, 0, INTER_NEAREST);                    
+            resize(mapToDraw, mapToDraw, Size(gridMap.height*3, gridMap.width*3), 0, 0, INTER_NEAREST);                    
             imshow( "Path", mapToDraw);
             waitKey(1);
         }
@@ -234,7 +242,6 @@ int main(){
 
 	}
     cout << "Number of steps in simulation = " << nstp << endl;
-
 
 	waitKey(0);
 	

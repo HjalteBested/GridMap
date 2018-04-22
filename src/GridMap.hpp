@@ -16,7 +16,7 @@
 #include <opencv2/highgui/highgui.hpp>
 
 #define ASTAR_USE_OPENCV
-#include "astar.h"
+#include "astar.hpp"
 
 using namespace std;
 using namespace Eigen;
@@ -39,12 +39,15 @@ public:
     } 
 
     float maxDistance;  /// Max Distance (Laser Measurement Range) in meters.
+    float minDistance;  /// Minimum Distance. If points are detected closer to the scanner than this value, the point is ignored.
     float resolDeg;     /// Laser Scanner Resolution in Deg
     float resolRad;     /// Laser Scanner Resolution in Rad
     float fov;          /// Laser Scanner Field-of-view in Deg
 
     int nScanLines;     /// Number of scanning lines (deduced from scan width and resolution)
-    MatrixXf scanData;  /// Matrix for holding the laser scan data format is scanData(2,nScanLines), where phi(i) = scanData(0,i), rho(i) = scanData(1,i)
+    MatrixXd scanData;  /// Matrix for holding the laser scan data format is scanData(2,nScanLines), where phi(i) = scanData(0,i), rho(i) = scanData(1,i)
+    MatrixXd scanCart;
+    MatrixXd scanWorld;
 
     /** Initialise LaserScanner: Calculate the resolution in radian and determine the number of scanning lines (nScanLines). */
     void init(){
@@ -55,7 +58,7 @@ public:
     Vector3f pose;  /// Scan Pose in world coordinates (x,y,theta)
 
     /// Set Scan Pose in world coordinates (x,y,theta)
-    void setPose(Vector3f newpose){ 
+    void setPose(Vector3f const& newpose){ 
         pose = newpose;
     }
     /// Set Scan Pose in world coordinates (x,y,theta)
@@ -69,12 +72,12 @@ public:
     }
 
     /** Convert polar coordinates to cartesian coordinates */
-    MatrixXf polarToCart(MatrixXf const& scanPolar){
-        int nScanLines = scanPolar.cols();
-        MatrixXf scanCart(2,nScanLines);
+    MatrixXd polarToCart(MatrixXd const& scanPolar){
+        const int& nScanLines = scanPolar.cols();
+        scanCart.resize(2,nScanLines);
         for(int i=0; i<nScanLines; i++){
-            double phi = scanPolar(0,i);
-            double rho = scanPolar(1,i);
+            double const& phi = scanPolar(0,i);
+            double const& rho = scanPolar(1,i);
             double x = rho * cos(phi);
             double y = rho * sin(phi);
             scanCart(0,i) = x;
@@ -84,19 +87,19 @@ public:
     }
 
     /** Convert cartesian coordinates in the scanner frame to cartesian coordinates in the world frame */
-    MatrixXf cartToWorld(MatrixXf const& scanCart, Vector3f const& pose){
-        int nScanLines = scanCart.cols();
-        MatrixXf scanWorld(2,nScanLines);
-        double x = pose(0);
-        double y = pose(1);
-        double th = pose(2);
+    MatrixXd cartToWorld(MatrixXd const& scanCart, Vector3f const& pose){
+        const int& nScanLines = scanCart.cols();
+        scanWorld.resize(2,nScanLines);
+        double const& x = pose(0);
+        double const& y = pose(1);
+        double const& th = pose(2);
         double costh = cos(th);
         double sinth = sin(th);
 
         // Transform all the coordinates and store them in scanWorld
         for(int i=0; i<nScanLines; i++){
-            double xs = scanCart(0,i);
-            double ys = scanCart(1,i);
+            double const& xs = scanCart(0,i);
+            double const& ys = scanCart(1,i);
             double xw = xs*costh - ys*sinth + x;
             double yw = ys*costh + xs*sinth + y;
             scanWorld(0,i) = xw;
@@ -106,50 +109,32 @@ public:
     }
 
     /** Convert polar coordinates in the scanner frame to cartesian coordinates in the world frame directly */
-    inline MatrixXf polarToWorld(MatrixXf const& scanPolar, Vector3f const& pose){
-        int nScanLines = scanPolar.cols();
-        MatrixXf scanWorld(2,nScanLines);
-        double x = pose(0);
-        double y = pose(1);
-        double th = pose(2);
-        double costh = cos(th);
-        double sinth = sin(th);
-
-        for(int i=0; i<nScanLines; i++){
-            double phi = scanPolar(0,i);
-            double rho = scanPolar(1,i);
-            double xs = rho * cos(phi);
-            double ys = rho * sin(phi);
-            double xw = xs*costh - ys*sinth + x;
-            double yw = ys*costh + xs*sinth + y;
-            scanWorld(0,i) = xw;
-            scanWorld(1,i) = yw;
-        }
-        return scanWorld;
+    inline MatrixXd polarToWorld(MatrixXd const& scanPolar, Vector3f const& pose){
+        return cartToWorld(polarToCart(scanPolar),pose);
     }
 
     /** Overloaded convinience method */
-    inline MatrixXf cartToWorld(MatrixXf const& scanCart){
+    inline MatrixXd cartToWorld(MatrixXd const& scanCart){
         return cartToWorld(scanCart, this->pose);
     }
 
     /** Overloaded convinience method */
-    inline MatrixXf polarToWorld(MatrixXf const& scanPolar){
+    inline MatrixXd polarToWorld(MatrixXd const& scanPolar){
         return polarToWorld(scanPolar,pose);
     }
 
     /// Return scan in polar (default) coordinates
-    inline MatrixXf scanPolar(){
+    inline MatrixXd getScanPolar(){
         return scanData;
     }
 
     /// Return scan in Laser local cartesian coordinates
-    inline MatrixXf scanCart(){
+    inline MatrixXd getScanCart(){
         return polarToCart(scanData);
     }
 
     /// Return scan in world cartesian coordinates, based on the internal pose
-    inline MatrixXf scanCartWorld(){
+    inline MatrixXd getScanCartWorld(){
         return polarToWorld(scanData, pose);
     }
 
@@ -158,13 +143,13 @@ public:
         scanData.resize(2,nScanLines);
     }
 
-    void setScanPoint(int i, float phi, float r){
+    void setScanPoint(int const& i, double const& phi, double const& r){
         scanData(0,i) = phi;
         scanData(1,i) = r;
     }
 
     /** Simulate a laser scan. The lines are defined as a matrix where each column represents a line and the rows are [x1; y1; x2; y2] */
-    MatrixXf simScan(Vector3f const& pose, MatrixXf const& lines){
+    MatrixXd simScan(Vector3f const& pose, MatrixXd const& lines){
         int nLines = lines.cols();
         double x = pose(0);
         double y = pose(1);
@@ -196,7 +181,6 @@ public:
         // Rezise the scanData matrix, if the size is correct already, Eigen 
         // ensures that this is a no-operation
         scanData.resize(2,nScanLines); 
-
 
         /* ------------------------------------------------------------------------
          * --- Conversion of the lines from global frame to scanner local frame ---
@@ -293,7 +277,7 @@ public:
         return scanData;
     }
 
-    inline MatrixXf simScan(MatrixXf const& lines){
+    inline MatrixXd simScan(MatrixXd const& lines){
         return simScan(pose,lines);
     }
 };
@@ -319,9 +303,38 @@ public:
     float yoffset = 0;
 
     int fillMode = 0;
-    int clearMode = 0;
-    Astar astar;
+    int clearMode = 0; 
+    Astar astar;        /// A* search algorithm 
+    Point scanPosCell;  /// The current cell position of the LaserScanner
 
+    GridMap() { }
+    GridMap(float widthInMeters, float heightInMeters, float cellSize) {
+        this->resize(widthInMeters, heightInMeters, cellSize);
+    }
+
+    void resize(float widthInMeters, float heightInMeters, float cellSize){
+        this->cellSize = cellSize;
+        this->height = ceil(heightInMeters/cellSize);
+        this->width  = ceil(widthInMeters/cellSize);
+        this->size = width * height;
+        this->setOffset(widthInMeters/2.0,heightInMeters/2.0);
+        mapData.create(height,width,CV_8SC1);
+        dialatedMap.create(height,width,CV_8SC1);
+        invDialatedMap.create(height,width,CV_8SC1);
+        distanceMap_32F.create(height,width,CV_32F);
+        distanceMap.create(height,width,CV_8SC1);
+        astar.resize(height, width);
+        astar.wrapMap = wrapMap;
+        this->clear();
+    }
+
+    void clear(){
+        mapData.setTo(-1);
+        dialatedMap.setTo(0);
+        distanceMap.setTo(0);
+        astar.clear();
+    }
+    
     float widthInMeters() {
         return width*cellSize;
     }
@@ -334,27 +347,13 @@ public:
         this->yoffset = yoffset;
     }
 
+    /** If wrapMap is enabled the map is wrapped around the edges. This allows the map to be used in a more local sence. */
     void setWrapMap(bool wrapMap){
         this->wrapMap = wrapMap;
         astar.wrapMap = wrapMap;
     }
 
-    void resize(float widthInMeters, float heightInMeters, float cellSize){
-        this->cellSize = cellSize;
-        this->height = ceil(heightInMeters/cellSize);
-        this->width = ceil(widthInMeters/cellSize);
-        this->size = width * height;
-        this->setOffset(widthInMeters/2,heightInMeters/2);
-        mapData.create(height,width,CV_8SC1);
-        dialatedMap.create(height,width,CV_8SC1);
-        invDialatedMap.create(height,width,CV_8SC1);
-        distanceMap_32F.create(height,width,CV_32F);
-        distanceMap.create(height,width,CV_8SC1);
-        astar.resize(height, width);
-        astar.wrapMap = wrapMap;
-        this->clear();
-    }
-
+    /** Make Structuring Element for Map dialation */
     void makeStrel(float width){
         int dilationSize = ceil(0.5*width/cellSize);
         strel = getStructuringElement( 
@@ -363,18 +362,6 @@ public:
             Point( dilationSize, dilationSize ) );
     }
 
-    GridMap() { }
-    GridMap(float widthInMeters, float heightInMeters, float cellSize) {
-        this->resize(widthInMeters, heightInMeters, cellSize);
-    }
-
-    void clear(){
-        mapData.setTo(-1);
-        dialatedMap.setTo(0);
-        distanceMap.setTo(0);
-        astar.clear();
-    }
-    
     /// An implementation of Bresenham's line algorithm, see http://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
     vector<Point> bresenhamPoints(int x0, int y0, int x1, int y1){
         Point point;
@@ -428,7 +415,8 @@ public:
         return val;
     }
 
-    inline Point findCell(float x, float y){
+    /** Convert a point from world coordinates to map cell coordinates */
+    inline Point worldToCell(float x, float y){
         int& rows = mapData.rows;
         x = x+xoffset;
         y = y+yoffset;
@@ -438,17 +426,13 @@ public:
         return cell;
     }
 
-    inline Point worldToMap(float x, float y){
-        int& rows = mapData.rows;
-        x = x+xoffset;
-        y = y+yoffset;
-        Point cell;
-        cell.x = x/cellSize;
-        cell.y = rows - floor(y/cellSize + 1);
-        return cell;
+    /** Convert a point from world coordinates to map cell coordinates */
+    inline Point worldToCell(Point2f const& world){
+        return cellToWorld(world.x,world.y);
     }
 
-    inline Point2f mapToWorld(int const& x, int const& y){
+    /** Convert a point from map cell coordinates to world coordinates */
+    inline Point2f cellToWorld(int const& x, int const& y){
         int& rows = mapData.rows;
         Point2f world;
         // Translate from map coordinates to world coordinates
@@ -457,15 +441,12 @@ public:
         return world;
     }
 
-    inline Point worldToMap(Point2f const& world){
-        return mapToWorld(world.x,world.y);
+    /** Convert a point from map cell coordinates to world coordinates */
+    inline Point2f cellToWorld(Point const& cell){
+        return cellToWorld(cell.x,cell.y);
     }
 
-    inline Point2f mapToWorld(Point const& cell){
-        return mapToWorld(cell.x,cell.y);
-    }
-
-
+    /** wrao a point around the edges of the map. */
     inline Point wrap(Point cell){
         int& rows = mapData.rows;
         int& cols = mapData.cols;
@@ -478,18 +459,18 @@ public:
         return cell;
     }
 
+    /** wrap an x-coordinate around the edges of the map. If wrapMap is false this is a no-operation. */
     inline int wx(int x){
-        // Wrapping the map
-        if(wrapMap){
+        if(wrapMap){ // Wrapping the map
             int cols = mapData.cols;
             while(x < 0)       x += cols;
             while(x >= cols)   x -= cols;
         }   
         return x;
     }
+    /** wrap an y-coordinate around the edges of the map. If wrapMap is false this is a no-operation. */
     inline int wy(int y){
-        if(wrapMap){
-            // Wrapping the map
+        if(wrapMap){ // Wrapping the map
             int rows = mapData.rows;
             while(y < 0)       y += rows;    
             while(y >= rows)   y -= rows;
@@ -497,6 +478,7 @@ public:
         return y;
     } 
 
+    /** Reset a MapNode in the astar instance and set its (x,y) and type */
     inline void resetMapNode(int const& x, int const& y, char const& value){
         MapNode*node = astar.mapAt(x,y);
         if(node != NULL){
@@ -507,6 +489,7 @@ public:
         }
     }
 
+    /** Reset set a cell to a new type */
     void setCell(int const& x, int const& y, char const& value, int const& mode){
         int& rows = mapData.rows;
         int& cols = mapData.cols;
@@ -535,9 +518,10 @@ public:
         }
     }
 
+    /** Return the value of the obstacle map at coordinate (x,y) */
     char mapAt(int x, int y){
-        int& rows = mapData.rows;
-        int& cols = mapData.cols;
+        const int& rows = mapData.rows;
+        const int& cols = mapData.cols;
 
         // Wrapping the map
         if(wrapMap){
@@ -554,6 +538,7 @@ public:
         return 0;
     }
 
+    /** Return the value of the dialated map at coordinate (x,y) */
     uchar dialatedMapAt(int x, int y){
         int& rows = mapData.rows;
         int& cols = mapData.cols;
@@ -573,6 +558,7 @@ public:
         return 0xFF;
     }
 
+    /** Return the value of the distance map at coordinate (x,y) */
     uchar distanceMapAt(int x, int y){
         int& rows = mapData.rows;
         int& cols = mapData.cols;
@@ -592,33 +578,29 @@ public:
         return 0;
     }
 
-    // store the converted scans globally as they are used by several funcitons,
-    // maybe store them in LaserScanner ?
-    MatrixXf scanPolar;
-    MatrixXf scanWorld;
-    Point scanPosCell;
-
+    /** Update the map. This should be called whenever new laser scan data is available. */
     void updateMap(LaserScanner *scan, float maxLSDist){
         float& x = scan->pose(0);
         float& y = scan->pose(1);
 
         // Cell Laser Scanner Position
-        scanPosCell = findCell(x,y);
+        scanPosCell = worldToCell(x,y);
         // cout << "scanPosCell = (" << scanPosCell.x << "," << scanPosCell.y << ")" << endl;
 
         // Convert polar scan coordinates to laser cartesian coordinates
-        scanPolar = scan->scanPolar();
+        const MatrixXd& scanPolar = scan->getScanPolar();
         // Convert laser cartesian coordinates to world cartesian coordinates
-        scanWorld = scan->scanCartWorld();
+        const MatrixXd& scanWorld = scan->getScanCartWorld();
 
         vector<Point> pointsToFill;
 
         // Convert scan from world cartesian coordinates to cell position
         for(int i=0; i<scan->nScanLines; i++){
-            float& rho = scanPolar(1,i);
-            float& xs = scanWorld(0,i);
-            float& ys = scanWorld(1,i);
-            Point cell = findCell(xs, ys);
+            double const& rho = scanPolar(1,i);
+            if(rho < 0.020) continue;
+            double const& xs = scanWorld(0,i);
+            double const& ys = scanWorld(1,i);
+            Point cell = worldToCell(xs, ys);
             
             // Clear cells using bresenham's algorithm
             // cout << "ScanPosCell: (" << scanPosCell.x << "," << scanPosCell.y << "), cell: (" << cell.x << "," << cell.y << ")" << endl; 
@@ -639,6 +621,7 @@ public:
         // cout << "scanWorldCell:\n" << scanWorldCell.transpose() << endl;
     }
 
+    /** Compute various transformations, i.e. dialatedMap and distanceMap */
     void transform(){
         dilate( mapData > 0, dialatedMap, strel);
         #ifdef USE_CV_DISTANCE_TRANSFORM
@@ -651,10 +634,23 @@ public:
     /** Determine next waypoint defined as the furthest point seen by the laserscanner which is
     not occupied in the dialated obstacle map. The search has a preference for scanlines with small angles, which is achieved by 
     iterating from the middle and out and only replacing if a longer distance is found. Thus, small angles are only used in case of ties.*/
-    Point determineNextWaypointCell(LaserScanner *scan){
+    Point determineNextWaypointCell(LaserScanner *scan, float maxLSDist=1e7){
         float biggestDistanceInCells = 0;
         Point mostDistantCell;
         int nScanLinesHalf = scan->nScanLines/2;
+        
+        // Convert polar scan coordinates to laser cartesian coordinates
+        MatrixXd scanPolar = scan->getScanPolar();
+        
+        // Limit the range of the scan
+        if(maxLSDist < 1e6){
+            for(int i=0; i<scanPolar.cols(); i++){
+                double& rho = scanPolar(1,i);
+                if(rho > maxLSDist) rho = maxLSDist;
+            }
+        }
+        // Convert laser cartesian coordinates to world cartesian coordinates
+        MatrixXd scanWorld = scan->polarToWorld(scanPolar);
 
         // Convert scan from world cartesian coordinates to cell position
         for(int i=0; i<=nScanLinesHalf; i++){
@@ -663,12 +659,13 @@ public:
                 if(j==0)   k = nScanLinesHalf-i;
                 else       k = nScanLinesHalf+i;
                 if(k >= 0 && k < scan->nScanLines){
-                    float& xs  = scanWorld(0,k);
-                    float& ys  = scanWorld(1,k);
+                    double& rho = scanPolar(1,k);
+                    double& xs  = scanWorld(0,k);
+                    double& ys  = scanWorld(1,k);
                     // float& phi = scanPolar(0,k);
-                    float& rho = scanPolar(1,k);
-                    if(rho < (biggestDistanceInCells+2)*cellSize) continue;
-                    Point cell = findCell(xs, ys);
+
+                    if(rho < biggestDistanceInCells*cellSize) continue;
+                    Point cell = worldToCell(xs, ys);
                     // int obstdist = distanceMapAt(cell.x,cell.y);
 
                     // Clear search for furthest available point using Bresenham's algorithm
@@ -696,8 +693,8 @@ public:
     /** Determine next waypoint defined as the furthest point seen by the laserscanner, 
     not occupied in the dialated map, with preference for scanlines with small angles, achieved by 
     iterating from the middle and out and only replacing if a longer distance is found. */
-    inline Point2f determineNextWaypoint(LaserScanner *scan){
-        return mapToWorld(determineNextWaypointCell(scan));
+    inline Point2f determineNextWaypoint(LaserScanner *scan, float maxLSDist=1e8){
+        return cellToWorld(determineNextWaypointCell(scan));
     }
 
     /** This function will find the minimal cost path from the starting cell to the target cell. 
@@ -709,8 +706,10 @@ public:
         for (int y = 0; y < mapData.rows; y++) {
             for (int x = 0; x < mapData.cols; x++) {
                 MapNode *node = astar.mapAt(x,y);
-                node->type = NODE_TYPE_ZERO;
                 if(dialatedMapAt(x,y) > 0) node->type = NODE_TYPE_OBSTACLE;
+                else if(mapAt(x,y) == -1)  node->type = NODE_TYPE_UNKNOWN;
+                else node->type = NODE_TYPE_ZERO;
+
                 #ifdef USE_CV_DISTANCE_TRANSFORM
                 node->obstdist = distanceMapAt(x,y);
                 #else
@@ -722,14 +721,54 @@ public:
         return astar.findpath(xStart, yStart, xTarget, yTarget, maxIter);
     }
 
-    inline vector<MapNode *> simplifyPath(vector<MapNode *> const& path){
-        return astar.simplifyPath(path);
+    /** Wrap a value into the [-pi,pi) range */
+    inline float wrapToPi(float angle){
+        float TWO_PI = 2*M_PI;
+        while(angle > M_PI)     angle -= TWO_PI;
+        while(angle <= -M_PI)   angle += TWO_PI;
+        return angle;
+    }
+    
+    /** Simplify the path by removing points along straight line segments, keeping only the corner points. */
+    inline vector<MapNode *> simplifyPath(vector<MapNode *> path){
+        const bool DEBUG = true;
+
+        vector<MapNode *> newpath;
+        path = astar.simplifyPath(path);
+        //return path;
+        
+        
+        newpath.push_back(path.front());
+        for(int i=1; i<(path.size()-1); i++){
+            MapNode * P0 = path[i-1];
+            MapNode * P1 = path[i];
+            MapNode * P2 = path[i+1];
+            int dx01 = P1->x - P0->x;
+            int dy01 = P1->y - P0->y;
+            int dx12 = P2->x - P1->x;
+            int dy12 = P2->y - P1->y;
+            if(abs(dx12) == 1 && abs(dy12) == 1)  continue;
+            if(dx01 == dx12 && dy01 == dy12) continue;
+            newpath.push_back(P1);
+        }
+        newpath.push_back(path.back());
+
+        if(DEBUG){
+            cout << "newpath2:--";
+            for(int i=0; i<newpath.size(); i++){
+                cout << "->(" << newpath[i]->x << "," << newpath[i]->y << ")";
+            }
+            cout << endl;
+        }
+        
+        return newpath;
     }
 
+    /** Convert a path consisting of a vector of MapNode pointers to a vector of world coordinate waypoints */
     vector<Point2f> pathToWorld(vector<MapNode *> const& path){
         vector<Point2f> waypoints;
         for(int i=0; i<path.size(); i++){
-            waypoints.push_back(mapToWorld(path[i]->x,path[i]->y));
+            waypoints.push_back(cellToWorld(path[i]->x,path[i]->y));
         }
         
         /*
