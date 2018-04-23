@@ -162,8 +162,12 @@ int main(){
     Vector3f pose; pose << 0.26, 0, 0;
     //pose << 1.53779,-2.33605,-0.0965727;
 
-    int nstp=2500;
+    int nstp=1000;
     float time=0;
+
+    Point robotCell = gridMap.worldToCell(pose(0),pose(1));
+    gridMap.setSquare(robotCell.x,robotCell.y,ceil(robotWidth/cellSize),0);
+
 
     // Simulation
     for(int ii=0; ii<nstp; ii++){
@@ -174,6 +178,8 @@ int main(){
         laserScanner.pose = pose;
         cout << "scanpose: (" << pose(0) << "," << pose(1) << "," << pose(2) << ")" << endl;    
 
+        Point robotCell = gridMap.worldToCell(pose(0),pose(1));
+
 
 	    // Simumate a scan
 		laserScanner.simScan(lines);
@@ -183,12 +189,11 @@ int main(){
 
 	    // This following needs only to be done when a new route should be planned
         gridMap.transform();	// Dialate Map and Compute Distance Transform
-        Point wayPointCell = gridMap.determineNextWaypointCell(&laserScanner,2.5);
+        Point wayPointCell = gridMap.determineNextWaypointCell(&laserScanner,3.0f);
         // Point wayPointCell = gridMap.worldToCell(3.5,-4);
         // Vector2f wayPoint = map.determineNextWaypoint(&laserScanner);
         // cout << "wayPointCell = " << wayPointCell << endl;
 
-        Point robotCell = gridMap.worldToCell(pose(0),pose(1));
 
         vector<MapNode *> path = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 5e5);
         bool newPathFound = path.size() > 1;

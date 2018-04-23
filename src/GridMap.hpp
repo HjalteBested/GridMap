@@ -518,6 +518,22 @@ public:
         }
     }
 
+    void setLine(int const& x1, int const& y1, int const& x2, int const& y2, int value, int mode=0){
+        vector<Point> pointsToSet = bresenhamPoints(x1, y1, x2, y2);
+        for(uint i=0; i<pointsToSet.size(); i++){
+            setCell(pointsToSet[i].x, pointsToSet[i].y, value, mode);
+        }
+    }
+    void setSquare(int const& x, int const& y, int const& size, int value, int mode=0){
+        for(int iy=y-size; iy<=y+size; iy++){
+            for(int ix=x-size; ix<=x+size; ix++){
+                setCell(ix,iy,value, mode);
+                setCell(ix,iy,value, mode);
+                // cout << "setCell(" << ix << "," << iy << ") = " << value << endl;
+            }
+        }
+    }
+
     /** Return the value of the obstacle map at coordinate (x,y) */
     char mapAt(int x, int y){
         const int& rows = mapData.rows;
@@ -736,7 +752,6 @@ public:
         vector<MapNode *> newpath;
         path = astar.simplifyPath(path);
         //return path;
-        
         
         newpath.push_back(path.front());
         for(int i=1; i<(path.size()-1); i++){

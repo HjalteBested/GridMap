@@ -91,11 +91,13 @@ public:
 
 	int G_DIRECT_COST   = 1000; /// Cost of moving to a direct neighbor cell 
 	int G_DIAGONAL_COST = 1414;	/// Cost of moving to a diagonal neighbor cell, i.e. ≈ G_DIRECT_COST * sqrt(2);
-	int G_UNKNOWN_COST = 10;
+	int G_UNKNOWN_COST = 100;
     int H_AMITGAIN = 2;			/// Gain for the tie-breaker. Zero means it is disabled completely.
 	int G_OBST_COST = 1000;		/// The obstacle distance cost is: G_OBST_COST/obstdist.
 	int G_OBST_THRESH = 5;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
     int ALLOW_DIAGONAL_PASSTHROUGH = 1;
+	bool unknownAsObstacle = false;
+
 
 	MapSize mapSize;				/// Class for storing the size of the Map
 	vector<MapNode> mapData;		/// The actual map data
@@ -322,9 +324,9 @@ public:
 	         if(DEBUG) cout << "       ... has " << neighborNodes.size() << " neighbors" << endl;
 	        for (uint i = 0; i < neighborNodes.size(); i++) {
 	            MapNode *_node = neighborNodes[i];
-	            if ( _node->type == NODE_TYPE_OBSTACLE) {
-	                continue;
-	            }
+	            if ( _node->type == NODE_TYPE_OBSTACLE) continue;
+	            else if(_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle) continue;
+
 	            int g = node->g + computeG(node, _node);
 	            if (_node->flag == NODE_FLAG_UNDEFINED || g < _node->g) {
 	                _node->g = g;
