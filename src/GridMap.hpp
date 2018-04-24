@@ -23,9 +23,11 @@ using namespace Eigen;
 using namespace cv;
 
 
+/*
 #ifndef USE_CV_DISTANCE_TRANSFORM
-// #define USE_CV_DISTANCE_TRANSFORM
+#define USE_CV_DISTANCE_TRANSFORM
 #endif
+*/
 
 class LaserScanner {
 public:
@@ -524,6 +526,7 @@ public:
             setCell(pointsToSet[i].x, pointsToSet[i].y, value, mode);
         }
     }
+
     void setSquare(int const& x, int const& y, int const& size, int value, int mode=0){
         for(int iy=y-size; iy<=y+size; iy++){
             for(int ix=x-size; ix<=x+size; ix++){
@@ -535,7 +538,7 @@ public:
     }
 
     /** Return the value of the obstacle map at coordinate (x,y) */
-    char mapAt(int x, int y){
+    inline char mapAt(int x, int y){
         const int& rows = mapData.rows;
         const int& cols = mapData.cols;
 
@@ -545,6 +548,7 @@ public:
             while(x >= cols)   x -= cols;
             while(y < 0)       y += rows;    
             while(y >= rows)   y -= rows;
+            return mapData.at<char>(y,x);
         }
 
         if((0 <= x && x < cols) && (0 <= y && y < rows)){
@@ -555,7 +559,7 @@ public:
     }
 
     /** Return the value of the dialated map at coordinate (x,y) */
-    uchar dialatedMapAt(int x, int y){
+    inline uchar dialatedMapAt(int x, int y){
         int& rows = mapData.rows;
         int& cols = mapData.cols;
 
@@ -565,6 +569,7 @@ public:
             while(x >= cols)   x -= cols;
             while(y < 0)       y += rows;    
             while(y >= rows)   y -= rows;
+            return dialatedMap.at<uchar>(y,x);
         }
 
         if((0 <= x && x < cols) && (0 <= y && y < rows)){
@@ -575,7 +580,7 @@ public:
     }
 
     /** Return the value of the distance map at coordinate (x,y) */
-    uchar distanceMapAt(int x, int y){
+    inline uchar distanceMapAt(int x, int y){
         int& rows = mapData.rows;
         int& cols = mapData.cols;
 
@@ -585,6 +590,7 @@ public:
             while(x >= cols)   x -= cols;
             while(y < 0)       y += rows;    
             while(y >= rows)   y -= rows;
+            return distanceMap.at<uchar>(y,x);
         }
 
         if((0 <= x && x < cols) && (0 <= y && y < rows)){
@@ -640,10 +646,11 @@ public:
     /** Compute various transformations, i.e. dialatedMap and distanceMap */
     void transform(){
         dilate( mapData > 0, dialatedMap, strel);
+        
         #ifdef USE_CV_DISTANCE_TRANSFORM
         bitwise_not(dialatedMap, invDialatedMap);
         distanceTransform(invDialatedMap, distanceMap_32F, CV_DIST_L2, 5, CV_32F);
-        distanceMap_32F.convertTo(distanceMap,dialatedMap.type());
+        distanceMap_32F.convertTo(distanceMap,dialatedMap.type());        
         #endif
    }
 
@@ -729,11 +736,10 @@ public:
                 #ifdef USE_CV_DISTANCE_TRANSFORM
                 node->obstdist = distanceMapAt(x,y);
                 #else
-                node->obstdist = 0;
+                node->obstdist = -1;
                 #endif
             }
         }
-
         return astar.findpath(xStart, yStart, xTarget, yTarget, maxIter);
     }
 
@@ -747,7 +753,7 @@ public:
     
     /** Simplify the path by removing points along straight line segments, keeping only the corner points. */
     inline vector<MapNode *> simplifyPath(vector<MapNode *> path){
-        const bool DEBUG = true;
+        const bool DEBUG = false;
 
         vector<MapNode *> newpath;
         path = astar.simplifyPath(path);

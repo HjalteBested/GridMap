@@ -7,7 +7,7 @@
 
 //#include <iostream>
 //#include <Eigen/Dense>
-#define USE_CV_DISTANCE_TRANSFORM
+//#define USE_CV_DISTANCE_TRANSFORM
 
 #include "GridMap.hpp"
 #include "RobotMPC.h"
@@ -159,16 +159,16 @@ int main(){
     namedWindow( "Path", WINDOW_AUTOSIZE );
     moveWindow("Path", 0,0);
 
-    Vector3f pose; pose << 0.26, 0, 0;
+    Vector3f pose; pose << 0.5, 0, 0;
     //pose << 1.53779,-2.33605,-0.0965727;
 
     int nstp=1000;
     float time=0;
 
     Point robotCell = gridMap.worldToCell(pose(0),pose(1));
-    gridMap.setSquare(robotCell.x,robotCell.y,ceil(robotWidth/cellSize),0);
+    //gridMap.setSquare(robotCell.x,robotCell.y,ceil(robotWidth/cellSize),0);
 
-
+    gridMap.astar.unknownAsObstacle = true;
     // Simulation
     for(int ii=0; ii<nstp; ii++){
         pose(2) = pf.wrapToPi(pose(2));
@@ -194,15 +194,14 @@ int main(){
         // Vector2f wayPoint = map.determineNextWaypoint(&laserScanner);
         // cout << "wayPointCell = " << wayPointCell << endl;
 
-
-        vector<MapNode *> path = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 5e5);
-        bool newPathFound = path.size() > 1;
+        
+        vector<MapNode *> path = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 1e4);
+        bool newPathFound = gridMap.astar.reachedTarget;
         vector<MapNode *> newpath;
         vector<Point2f> waypoints;
         if(newPathFound){
             newpath = gridMap.simplifyPath(path);
             waypoints = gridMap.pathToWorld(newpath);
-            // newpath = gridMap.simplifyPath(newpath);
         
             int nWayPoints = waypoints.size();
             // if(nWayPoints > 5) nWayPoints = 5;
@@ -235,8 +234,9 @@ int main(){
             waitKey(1);
         }
 
-
+        
         }
+
 
         // Controller
         pf.compute(pose(0),pose(1),pose(2));

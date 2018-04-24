@@ -52,7 +52,7 @@ public:
     int y = -1; // y-position
     int h = 0;	// Heuristic cost
     int g = 0;  // Cost from start to node
-    int obstdist = 0;	// Terrain cost
+    int obstdist = -1;	// Terrain cost
     int type = NODE_TYPE_ZERO;
     int flag = NODE_FLAG_UNDEFINED;
     MapNode *parent = NULL;
@@ -75,7 +75,7 @@ public:
     void clear(){
     	this->h = 0;
     	this->g = 0;
-        this->obstdist = 0;
+        this->obstdist = -1;
     	this->type = NODE_TYPE_ZERO;
     	this->flag = NODE_FLAG_UNDEFINED;
     	this->parent = NULL;
@@ -91,7 +91,7 @@ public:
 
 	int G_DIRECT_COST   = 1000; /// Cost of moving to a direct neighbor cell 
 	int G_DIAGONAL_COST = 1414;	/// Cost of moving to a diagonal neighbor cell, i.e. ≈ G_DIRECT_COST * sqrt(2);
-	int G_UNKNOWN_COST = 100;
+	int G_UNKNOWN_COST = 0;
     int H_AMITGAIN = 2;			/// Gain for the tie-breaker. Zero means it is disabled completely.
 	int G_OBST_COST = 1000;		/// The obstacle distance cost is: G_OBST_COST/obstdist.
 	int G_OBST_THRESH = 5;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
@@ -109,7 +109,8 @@ public:
 	MapNode *targetNode;
 	bool wrapMap = true;
     bool reachedTarget=false;
-	
+	vector<MapNode *> neighborNodes;
+
 	Astar() { }
 
     Astar(unsigned long width, unsigned long height) {
@@ -126,6 +127,7 @@ public:
                 node->y = y;
             }
         }
+		neighborNodes.reserve(8);
         if(DEBUG) cout << "MapSize(" << mapSize.width << ", " << mapSize.height << ", " << mapSize.size << ")" << endl;
     }
 
@@ -147,9 +149,9 @@ public:
 
 	/**	If your units can move at any angle (instead of grid directions), 
 	 *	then you should probably use a straight line distance: */
-	inline int straight_distance(MapNode* node1, MapNode* node2){
-		int dx = (node2->x - node1->x);
-		int dy = (node2->y - node1->y);
+	inline double straight_distance(MapNode* node1, MapNode* node2){
+		double dx = (node2->x - node1->x);
+		double dy = (node2->y - node1->y);
 		return sqrt(dx*dx + dy*dy);
 	}
 
@@ -192,7 +194,7 @@ public:
 	    if(node2->type == NODE_TYPE_UNKNOWN) unknowncost = G_UNKNOWN_COST;
 
 	    if(node1->x != node2->x && node1->y != node2->y) 
-	    	return G_DIAGONAL_COST + 2*obstCost + unknowncost; 	// if diagonal movement
+	    	return G_DIAGONAL_COST + 4*obstCost + unknowncost; 	// if diagonal movement
 	    else 
 	    	return G_DIRECT_COST + obstCost + unknowncost;		// if direct movement
 	}
@@ -218,26 +220,24 @@ public:
 	}
 
 	/** Return a pointer to the MapNode at (x,y) */
-	MapNode *mapAt(int x, int y){
-		int cols = mapSize.width;
-		int rows = mapSize.height;
-
+	inline MapNode *mapAt(int x, int y){
         // Wrapping the map
         if(wrapMap){
-            while(x < 0)       x += cols;
-            while(x >= cols)   x -= cols;
-            while(y < 0)       y += rows;
-            while(y >= rows)   y -= rows;
+            while(x < 0)       			x += mapSize.width;
+            while(x >= mapSize.width)   x -= mapSize.width;
+            while(y < 0)       			y += mapSize.height;
+            while(y >= mapSize.height)  y -= mapSize.height;
+            return &mapData[y * mapSize.width + x];
         }
 
-    	if (x < 0 || y < 0 || x >= mapSize.width || y >= mapSize.height) return 0;
+    	if (x < 0 || y < 0 || x >= mapSize.width || y >= mapSize.height) return 0;    	
     	return &mapData[y * mapSize.width + x];
 	}
 
 	/** Put a note into the map, the location is defined by the node itself! */
 	void putNode(MapNode node){
-		int cols = mapSize.width;
-		int rows = mapSize.height;
+		const int& cols = mapSize.width;
+		const int& rows = mapSize.height;
 		int x = node.x;
 		int y = node.y;
 
@@ -247,9 +247,8 @@ public:
             while(x >= cols)   x -= cols;
             while(y < 0)       y += rows;    
             while(y >= rows)   y -= rows;
-        }
-
-		if(x >= 0 && x < cols && y >= 0 && y < rows){
+            mapData[y * mapSize.width + x] = node;
+        } else if(x >= 0 && x < cols && y >= 0 && y < rows){
 			mapData[y * mapSize.width + x] = node;
 		}
 	}
@@ -282,7 +281,6 @@ public:
 	vector<MapNode *> findpath(unsigned long const& maxIter = 1e5) {
 	    path.clear();
         reachedTarget = false;
-	    // if(startNode !=0 || targetNode != 0 || startNode != targetNode) return path;
 
 	    if(DEBUG) cout << "Finding started!" << endl;
 	    int iteration = 0;
@@ -293,7 +291,7 @@ public:
 	        node = openList.at(0);
 
 	        for (int i = 0, max = openList.size(); i < max; i++) {
-                if (openList[i]->f() <= node->f() && openList[i]->h < node->h) {
+                if (openList[i]->f() <= node->f()) {
 	                node = openList[i];
 	            }
 	        }
@@ -315,17 +313,19 @@ public:
 	        }
 	        if(iteration++ > maxIter) {
 	        	cout << "MaxIteration Reached. Returning" << endl;
-	        	return path;
+	        	// return path;
 	            reversedPtr = node;
 	            break;
 	        }
 
-	        vector<MapNode *> neighborNodes = neighbors(node);
+	        neighborNodes = neighbors(node);
 	         if(DEBUG) cout << "       ... has " << neighborNodes.size() << " neighbors" << endl;
 	        for (uint i = 0; i < neighborNodes.size(); i++) {
 	            MapNode *_node = neighborNodes[i];
 	            if ( _node->type == NODE_TYPE_OBSTACLE) continue;
 	            else if(_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle) continue;
+
+	            if(_node->obstdist < 0 && iteration < 3e3) _node->obstdist = computeObstDist(_node);
 
 	            int g = node->g + computeG(node, _node);
 	            if (_node->flag == NODE_FLAG_UNDEFINED || g < _node->g) {
@@ -339,10 +339,13 @@ public:
 	                    _node->flag = NODE_FLAG_OPEN;
 	                    openList.push_back(_node);
 	                }
+
 	            }
 	        }
-
-	        if (openList.size() <= 0) break;
+	      	if (openList.size() <= 0){ 
+	      		reversedPtr = node;
+	      		break;
+	      	}
 
 	    }
 	    if (reversedPtr == 0) {
@@ -448,6 +451,39 @@ public:
 	    return available;
 	}
 
+	//** Find all the neighbors to the node and return a vector of MapNode pointers */
+	uint computeObstDist(MapNode *node){
+	    MapNode *_node;
+	    bool obstacleFound = false;
+	    uint dist = 1;
+		int x,y;
+
+	    while(!obstacleFound && dist < G_OBST_THRESH){   
+		    x = node->x-dist;
+		    for(y=node->y-dist; y<=node->y+dist; y++){
+		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE || (_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle))) return dist;
+		    }
+		    
+		   	x = node->x+dist;
+		    for(y=node->y-dist; y<=node->y+dist; y++){
+		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE || (_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle))) return dist;
+		    }
+
+		    y = node->y-dist;
+		    for(x=node->x-dist+1; x<=node->x+dist-1; x++){
+		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE || (_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle))) return dist;
+		    }
+
+		    y = node->y+dist;
+		    for(x=node->x-dist+1; x<=node->x+dist-1; x++){
+		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE || (_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle))) return dist;
+		    }
+		    dist++;
+		}
+		if(!obstacleFound) return -1;
+		return 0;
+	}
+
 	/** Print the map */
 	void printMap(){
 	    for (int y = 0; y < mapSize.height; y++) {
@@ -466,6 +502,29 @@ public:
 	    while(node.y >= rows)   node.y -= rows;
 	    return node;
 	}
+	
+	vector<MapNode *> obstacelEdgeNodes(){
+		vector<MapNode *> obstnodes;
+		// Find all obstacle nodes:
+		for(int i=0; i<mapData.size(); i++){
+			MapNode * node = &mapData[i];
+			if(node->type == NODE_TYPE_OBSTACLE){
+				node->obstdist = 0;
+
+				// Check if obstacle is an edgepoint
+				neighborNodes = neighbors(node);
+				if(neighborNodes.size() > 0){
+					bool isEdge=false;
+					for(int n=0; n<neighborNodes.size(); n++){
+						if(neighborNodes[n]->type == NODE_TYPE_ZERO) isEdge=true;
+					}
+					if(isEdge) obstnodes.push_back(node);
+				}
+			}
+		}
+		return obstnodes;
+	}
+
 
 	#ifdef ASTAR_USE_OPENCV // To allow using astar without having opencv included
 	/** Draw nodes as red circles. Intended for showing the simplified path nodes, enabled if ASTAR_USE_OPENCV is defined */
