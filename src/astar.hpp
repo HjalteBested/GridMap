@@ -72,7 +72,7 @@ public:
         return g + h;
     }
 
-    void clear(){
+    inline void clear(){
     	this->h = 0;
     	this->g = 0;
         this->obstdist = -1;
@@ -215,6 +215,23 @@ public:
 		closedList.clear();
 
 		// Set pointers to zero
+		startNode  = NULL;
+	    targetNode = NULL;
+	}
+
+	void clearAll(){
+		for(int y=0; y<mapSize.height; y++){
+            for(int x=0; x<mapSize.width; x++){
+                MapNode * node = this->mapAt(x,y);
+                node->clear();
+                node->x = x;
+                node->y = y;
+            }
+        }
+        openList.clear();
+        closedList.clear();
+
+        // Set pointers to zero
 		startNode  = NULL;
 	    targetNode = NULL;
 	}

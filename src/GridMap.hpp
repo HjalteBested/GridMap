@@ -334,7 +334,7 @@ public:
         mapData.setTo(-1);
         dialatedMap.setTo(0);
         distanceMap.setTo(0);
-        astar.clear();
+        astar.clearAll();
     }
     
     float widthInMeters() {
