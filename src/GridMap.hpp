@@ -355,11 +355,11 @@ public:
         astar.wrapMap = wrapMap;
     }
 
-    /** Make Structuring Element for Map dialation */
-    void makeStrel(float width){
+    /** Make Structuring Element for Map dialation. MORPH_RECT, MORPH_ELLIPSE */
+    void makeStrel(float width, int dialation_type = MORPH_ELLIPSE){
         int dilationSize = ceil(0.5*width/cellSize);
         strel = getStructuringElement( 
-            MORPH_RECT,
+            dialation_type,
             Size( 2*dilationSize+1, 2*dilationSize+1 ),
             Point( dilationSize, dilationSize ) );
     }
@@ -633,7 +633,7 @@ public:
                 setCell(pointsToClear[ii].x, pointsToClear[ii].y, 0, clearMode);
             }
 
-            if(0.050 < rho && rho <= maxLSDist) pointsToFill.push_back(cell);
+            if(0.025 < rho && rho <= maxLSDist) pointsToFill.push_back(cell);
         }
 
         for(uint ii=0; ii<pointsToFill.size(); ii++){
