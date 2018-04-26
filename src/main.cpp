@@ -7,7 +7,7 @@
 
 //#include <iostream>
 //#include <Eigen/Dense>
-//#define USE_CV_DISTANCE_TRANSFORM
+// #define USE_CV_DISTANCE_TRANSFORM
 
 #include "GridMap.hpp"
 #include "RobotMPC.h"
@@ -25,6 +25,11 @@ RobotPathFollowMPC pf = RobotPathFollowMPC();
 
 // Mat mapToPlot;
 Mat mapToDraw;
+
+void drawPoseHist(Mat &mapToDraw, vector<Vector3f> poseHist){
+}
+
+
 
 int main(){
 
@@ -159,33 +164,47 @@ int main(){
     namedWindow( "Path", WINDOW_AUTOSIZE );
     moveWindow("Path", 0,0);
 
-    Vector3f pose; pose << 0.5, 0, 0;
+    Vector3f pose; pose << 0, 0, 0;
+    vector<Vector3f> postHist;
     //pose << 1.53779,-2.33605,-0.0965727;
+    Vector3f scanPoseR; scanPoseR << 0.255, 0, 0;
 
-    int nstp=1000;
+    int nstp=2400;
     float time=0;
 
-    Point robotCell = gridMap.worldToCell(pose(0),pose(1));
-    //gridMap.setSquare(robotCell.x,robotCell.y,ceil(robotWidth/cellSize),0);
-
     gridMap.astar.unknownAsObstacle = true;
+
     // Simulation
     for(int ii=0; ii<nstp; ii++){
         pose(2) = pf.wrapToPi(pose(2));
+        postHist.push_back(pose);
+
+        // Set new position
+        float& x  = pose(0);
+        float& y  = pose(1);
+        float& th = pose(2);
+        float cs = cos(th);
+        float sn = sin(th);
 
         if(ii % 5 == 0){
-        // Set pose of the scanner
-        laserScanner.pose = pose;
-        cout << "scanpose: (" << pose(0) << "," << pose(1) << "," << pose(2) << ")" << endl;    
+        // Set Laserpose in world coordinates
+        laserScanner.setPose(
+            x + cs*scanPoseR(0) - sn*scanPoseR(1),
+            y + cs*scanPoseR(1) + sn*scanPoseR(0),
+            th+scanPoseR(2));
 
-        Point robotCell = gridMap.worldToCell(pose(0),pose(1));
+        cout << "scanpose: (" << laserScanner.pose(0) << "," << laserScanner.pose(1) << "," << laserScanner.pose(2) << ")" << endl;    
+        
+        // Simumate a scan
+        laserScanner.simScan(lines);
 
-
-	    // Simumate a scan
-		laserScanner.simScan(lines);
+        // Convert robot world coordinate to cell coordinate
+        Point robotCell = gridMap.worldToCell(x,y);
+        Point scanCell  = gridMap.worldToCell(laserScanner.pose(0),laserScanner.pose(1));
 
 	    // Call this whenever new scandata is available
         gridMap.updateMap(&laserScanner, maxLSDist);
+        gridMap.setLine(robotCell.x, robotCell.y, scanCell.x, scanCell.y, 0, 1);
 
 	    // This following needs only to be done when a new route should be planned
         gridMap.transform();	// Dialate Map and Compute Distance Transform
@@ -194,8 +213,7 @@ int main(){
         // Vector2f wayPoint = map.determineNextWaypoint(&laserScanner);
         // cout << "wayPointCell = " << wayPointCell << endl;
 
-        
-        vector<MapNode *> path = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 1e4);
+        vector<MapNode *> path = gridMap.findpath(robotCell.x, robotCell.y, wayPointCell.x, wayPointCell.y, 1e5);
         bool newPathFound = gridMap.astar.reachedTarget;
         vector<MapNode *> newpath;
         vector<Point2f> waypoints;
@@ -212,14 +230,10 @@ int main(){
             }
 
             pf.setWaypoints(wp);
-            pf.currentLine = 0;
-        
-        // cout << "waypoints:\n" << waypoints << endl;
+            pf.currentLine = 0;        
         }
 
-
-
-        if(ii % 30 == 0 && newPathFound){
+        if(ii % 10 == 0 && newPathFound){
             mapToDraw = (gridMap.mapData+1);
             mapToDraw.convertTo(mapToDraw,CV_8UC3);
             mapToDraw *= 127;

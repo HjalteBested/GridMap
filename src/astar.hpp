@@ -69,6 +69,7 @@ public:
     }
 
     int f(){
+    	if(obstdist > 0) return g + h + 100/obstdist;
         return g + h;
     }
 
@@ -91,13 +92,13 @@ public:
 
 	int G_DIRECT_COST   = 1000; /// Cost of moving to a direct neighbor cell 
 	int G_DIAGONAL_COST = 1414;	/// Cost of moving to a diagonal neighbor cell, i.e. ≈ G_DIRECT_COST * sqrt(2);
-	int G_UNKNOWN_COST = 0;
-    int H_AMITGAIN = 2;			/// Gain for the tie-breaker. Zero means it is disabled completely.
+	int G_UNKNOWN_COST  = 0;	/// Cost of moving to an unknown neighbor cell
+    int H_AMITGAIN = 0;			/// Gain for the tie-breaker. Zero means it is disabled completely.
 	int G_OBST_COST = 1000;		/// The obstacle distance cost is: G_OBST_COST/obstdist.
-	int G_OBST_THRESH = 5;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
+	int G_OBST_THRESH = 1000;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
     int ALLOW_DIAGONAL_PASSTHROUGH = 1;
 	bool unknownAsObstacle = false;
-
+	float g_obst_rep = 3.0;
 
 	MapSize mapSize;				/// Class for storing the size of the Map
 	vector<MapNode> mapData;		/// The actual map data
@@ -105,8 +106,8 @@ public:
 	vector<MapNode *> closedList; 	/// The closedList is not really needed for the algorithm to run, but is handy for visualising which nodes was examined in the path determination
 	vector<MapNode *> path;
 
-	MapNode *startNode;
-	MapNode *targetNode;
+	MapNode *startNode=NULL;
+	MapNode *targetNode=NULL;
 	bool wrapMap = true;
     bool reachedTarget=false;
 	vector<MapNode *> neighborNodes;
@@ -178,7 +179,7 @@ public:
 	*	current node (node1) to goal node (node2). */
 	inline int computeH(MapNode *node1, MapNode *node2){
 	    if (ALLOW_DIAGONAL_PASSTHROUGH) {
-	        return diagonal_distance(node1, node2)  * G_DIAGONAL_COST;
+	        return diagonal_distance(node1, node2) * G_DIAGONAL_COST;
 	    } else {
 	        return manhattan_distance(node1, node2) * G_DIRECT_COST;
 	    }
@@ -186,17 +187,20 @@ public:
 
 	/** Compute the cost from startnode (node1) to current node (node2). */
 	inline int computeG(MapNode *node1, MapNode *node2) {
-		int obstCost=0;
+		int cost=0;
+		float obstCost=0.0;
 		if(node2->obstdist > 0 && node2->obstdist < G_OBST_THRESH){
-			obstCost = ceil(G_OBST_COST/node2->obstdist);
+			obstCost =  g_obst_rep * (1.0/node2->obstdist - 1.0/G_OBST_THRESH);
 		}
-		int unknowncost=0;
-	    if(node2->type == NODE_TYPE_UNKNOWN) unknowncost = G_UNKNOWN_COST;
 
 	    if(node1->x != node2->x && node1->y != node2->y) 
-	    	return G_DIAGONAL_COST + 4*obstCost + unknowncost; 	// if diagonal movement
+	    	cost = G_DIAGONAL_COST * (1+obstCost); 	// if diagonal movement
 	    else 
-	    	return G_DIRECT_COST + obstCost + unknowncost;		// if direct movement
+	    	cost = G_DIRECT_COST   * (1+obstCost);	// if direct movement
+
+		if(node2->type == NODE_TYPE_UNKNOWN) cost += G_UNKNOWN_COST;
+
+	    return cost;
 	}
 
 	/** Clear all Nodes in the open and closed list, empty the lists, set startNode=NULL and targetNode = NULL. 
@@ -308,7 +312,7 @@ public:
 	        node = openList.at(0);
 
 	        for (int i = 0, max = openList.size(); i < max; i++) {
-                if (openList[i]->f() <= node->f()) {
+                if (openList[i]->f() <= node->f() && openList[i]->h < node->h){
 	                node = openList[i];
 	            }
 	        }
@@ -342,12 +346,12 @@ public:
 	            if ( _node->type == NODE_TYPE_OBSTACLE) continue;
 	            else if(_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle) continue;
 
-	            if(_node->obstdist < 0 && iteration < 3e3) _node->obstdist = computeObstDist(_node);
+	            if(_node->obstdist < 0 && G_OBST_THRESH > 0) _node->obstdist = computeObstDist(_node);
 
 	            int g = node->g + computeG(node, _node);
 	            if (_node->flag == NODE_FLAG_UNDEFINED || g < _node->g) {
 	                _node->g = g;
-	                _node->h = computeH(_node, targetNode);
+	                _node->h = computeH(_node, targetNode)*(1.0f+1.0f/G_OBST_THRESH);
 	                if(H_AMITGAIN > 0){
 	             	   _node->h += amits_modifier(startNode,_node,targetNode)*H_AMITGAIN;
 	            	}
@@ -478,26 +482,26 @@ public:
 	    while(!obstacleFound && dist < G_OBST_THRESH){   
 		    x = node->x-dist;
 		    for(y=node->y-dist; y<=node->y+dist; y++){
-		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE || (_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle))) return dist;
+		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE)){ _node->obstdist=dist; return dist; }
 		    }
 		    
 		   	x = node->x+dist;
 		    for(y=node->y-dist; y<=node->y+dist; y++){
-		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE || (_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle))) return dist;
+		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE)){ _node->obstdist=dist; return dist; }
 		    }
 
 		    y = node->y-dist;
 		    for(x=node->x-dist+1; x<=node->x+dist-1; x++){
-		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE || (_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle))) return dist;
+		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE)){ _node->obstdist=dist; return dist; }
 		    }
 
 		    y = node->y+dist;
 		    for(x=node->x-dist+1; x<=node->x+dist-1; x++){
-		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE || (_node->type == NODE_TYPE_UNKNOWN && unknownAsObstacle))) return dist;
+		    	if ((_node = mapAt(x,y)) != 0 && _node->x==x && _node->y==y && (_node->type == NODE_TYPE_OBSTACLE)){ _node->obstdist=dist; return dist; }
 		    }
 		    dist++;
 		}
-		if(!obstacleFound) return -1;
+		if(!obstacleFound){ _node->obstdist = -1; return -1; }
 		return 0;
 	}
 
