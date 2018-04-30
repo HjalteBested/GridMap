@@ -304,7 +304,7 @@ public:
     float xoffset = 0;
     float yoffset = 0;
 
-    int fillMode = 0;
+    int fillMode = -1;
     int clearMode = 0; 
     Astar astar;        /// A* search algorithm 
     Point scanPosCell;  /// The current cell position of the LaserScanner
@@ -357,7 +357,8 @@ public:
 
     /** Make Structuring Element for Map dialation. MORPH_RECT, MORPH_ELLIPSE */
     void makeStrel(float width, int dialation_type = MORPH_ELLIPSE){
-        int dilationSize = ceil(0.5*width/cellSize);
+        int dilationSize = round(0.5*(width-cellSize)/cellSize);
+        cout << "dilationSize=" << dilationSize << endl;
         strel = getStructuringElement( 
             dialation_type,
             Size( 2*dilationSize+1, 2*dilationSize+1 ),
@@ -410,7 +411,7 @@ public:
         return points;
     }
     
-    /// Round towards zero
+    /** Round towards zero */
     int fix(float val){
         if(val > 0) return floor(val);
         if(val < 0) return ceil(val);
@@ -464,7 +465,7 @@ public:
     /** wrap an x-coordinate around the edges of the map. If wrapMap is false this is a no-operation. */
     inline int wx(int x){
         if(wrapMap){ // Wrapping the map
-            int cols = mapData.cols;
+            const int& cols = mapData.cols;
             while(x < 0)       x += cols;
             while(x >= cols)   x -= cols;
         }   
@@ -473,7 +474,7 @@ public:
     /** wrap an y-coordinate around the edges of the map. If wrapMap is false this is a no-operation. */
     inline int wy(int y){
         if(wrapMap){ // Wrapping the map
-            int rows = mapData.rows;
+            const int& rows = mapData.rows;
             while(y < 0)       y += rows;    
             while(y >= rows)   y -= rows;
         }
@@ -486,8 +487,7 @@ public:
         if(node != NULL){
             node->x = x;
             node->y = y;
-            node->clear();
-            node->type = value;
+            node->clear(value);
         }
     }
 
@@ -502,7 +502,19 @@ public:
             resetMapNode(x,y,value);
             mapData.at<char>(ym,xm) = value;
 
-            int xm1; int xp1; int ym1; int yp1;
+            // int xm1; int xp1; int ym1; int yp1;
+            int xm1=wx(xm-1); int xp1=wx(xm+1); int ym1=wy(ym-1); int yp1=wy(ym+1);
+            if(value > 0 && mode == -1){
+                if(0 <= xm1   && mapData.at<char>(ym,xm1)<0){  mapData.at<char>(ym,xm1) = value; resetMapNode(x-1,y,value);}
+                if(xp1 < cols && mapData.at<char>(ym,xp1)<0){  mapData.at<char>(ym,xp1) = value; resetMapNode(x+1,y,value);}
+                if(0 <= ym1   && mapData.at<char>(ym1,xm)<0){  mapData.at<char>(ym1,xm) = value; resetMapNode(x,y-1,value);}
+                if(yp1 < rows && mapData.at<char>(yp1,xm)<0){  mapData.at<char>(yp1,xm) = value; resetMapNode(x,y+1,value);}
+                if(0 <= xm1   && 0 <= ym1   && mapData.at<char>(ym1,xm1)<0){ mapData.at<char>(ym1,xm1)=value; resetMapNode(x-1,y-1,value);}
+                if(0 <= xm1   && yp1 < rows && mapData.at<char>(yp1,xm1)<0){ mapData.at<char>(yp1,xm1)=value; resetMapNode(x-1,y+1,value);}
+                if(xp1 < cols && 0 <= ym-1  && mapData.at<char>(ym1,xp1)<0){ mapData.at<char>(ym1,xp1)=value; resetMapNode(x+1,y-1,value);}
+                if(xp1 < cols && yp1 < rows && mapData.at<char>(yp1,xp1)<0){ mapData.at<char>(yp1,xp1)=value; resetMapNode(x+1,y+1,value);}
+            }
+            
             if(mode > 0){
                 xm1=wx(xm-1); xp1=wx(xm+1); ym1=wy(ym-1); yp1=wy(ym+1);
                 if(0 <= xm1){    mapData.at<char>(ym,xm1) = value; resetMapNode(x-1,y,value);}

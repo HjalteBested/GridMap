@@ -52,7 +52,10 @@ int main(){
     cout << "Hello Dude!" << endl;
     float w = 10;
     float h = 10;
-    float cellSize = 0.03;
+    float robotWidth = 0.3;
+
+
+    float cellSize = robotWidth/6;
     float maxLSDist = 3.8f;
 
 	// Define Lines in cartesian space
@@ -156,7 +159,8 @@ int main(){
 
 
     // Make structuring element for map dialation - based on robot width, or 2*radius, or som safety margin
-    float robotWidth = 0.28;
+
+
     gridMap.makeStrel(robotWidth);
 
 

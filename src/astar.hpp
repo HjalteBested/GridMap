@@ -69,15 +69,15 @@ public:
     }
 
     int f(){
-    	if(obstdist > 0) return g + h + 100/obstdist;
+    	if(obstdist > 0) return g + h + 100/obstdist; 
         return g + h;
     }
 
-    inline void clear(){
-    	this->h = 0;
-    	this->g = 0;
+    inline void clear(int type=NODE_TYPE_ZERO){
+    	//this->h = 0;
+    	//this->g = 0;
         this->obstdist = -1;
-    	this->type = NODE_TYPE_ZERO;
+    	this->type = type;
     	this->flag = NODE_FLAG_UNDEFINED;
     	this->parent = NULL;
     }
@@ -95,7 +95,7 @@ public:
 	int G_UNKNOWN_COST  = 0;	/// Cost of moving to an unknown neighbor cell
     int H_AMITGAIN = 0;			/// Gain for the tie-breaker. Zero means it is disabled completely.
 	int G_OBST_COST = 1000;		/// The obstacle distance cost is: G_OBST_COST/obstdist.
-	int G_OBST_THRESH = 1000;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
+	int G_OBST_THRESH = 10;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
     int ALLOW_DIAGONAL_PASSTHROUGH = 1;
 	bool unknownAsObstacle = false;
 	float g_obst_rep = 3.0;
@@ -179,7 +179,7 @@ public:
 	*	current node (node1) to goal node (node2). */
 	inline int computeH(MapNode *node1, MapNode *node2){
 	    if (ALLOW_DIAGONAL_PASSTHROUGH) {
-	        return diagonal_distance(node1, node2) * G_DIAGONAL_COST;
+	        return diagonal_distance(node1, node2)  * G_DIAGONAL_COST;
 	    } else {
 	        return manhattan_distance(node1, node2) * G_DIRECT_COST;
 	    }
@@ -190,13 +190,13 @@ public:
 		int cost=0;
 		float obstCost=0.0;
 		if(node2->obstdist > 0 && node2->obstdist < G_OBST_THRESH){
-			obstCost =  g_obst_rep * (1.0/node2->obstdist - 1.0/G_OBST_THRESH);
+			obstCost =  g_obst_rep * (1.0f/node2->obstdist - 1.0f/G_OBST_THRESH);
 		}
 
 	    if(node1->x != node2->x && node1->y != node2->y) 
-	    	cost = G_DIAGONAL_COST * (1+obstCost); 	// if diagonal movement
+	    	cost = G_DIAGONAL_COST * (1 + obstCost); 	// if diagonal movement
 	    else 
-	    	cost = G_DIRECT_COST   * (1+obstCost);	// if direct movement
+	    	cost = G_DIRECT_COST   * (1 + obstCost);	// if direct movement
 
 		if(node2->type == NODE_TYPE_UNKNOWN) cost += G_UNKNOWN_COST;
 
@@ -351,7 +351,7 @@ public:
 	            int g = node->g + computeG(node, _node);
 	            if (_node->flag == NODE_FLAG_UNDEFINED || g < _node->g) {
 	                _node->g = g;
-	                _node->h = computeH(_node, targetNode)*(1.0f+1.0f/G_OBST_THRESH);
+	                _node->h = computeH(_node, targetNode) * (1.0f+1.0f/G_OBST_THRESH);
 	                if(H_AMITGAIN > 0){
 	             	   _node->h += amits_modifier(startNode,_node,targetNode)*H_AMITGAIN;
 	            	}
