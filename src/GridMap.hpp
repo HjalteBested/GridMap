@@ -783,14 +783,14 @@ public:
 					#endif
 
                     // cout << "Diff:" <<scanPosCell-cell << endl;
-                    uint ii=0;
+                    uint ii=1;
                     while(ii<points.size()){
                         Point point = points[ii];
                         if(dialatedMapAt(point.x,point.y) != 0) break;
                         float dx = point.x - scanPosCell.x;
                         float dy = point.y - scanPosCell.y;
                         float celldist = sqrt(dx*dx+dy*dy);
-                        if(celldist > biggestDistanceInCells && dialatedMapAt(point.x,point.y) == 0){
+                        if(celldist > biggestDistanceInCells){
                             biggestDistanceInCells = celldist;
                             mostDistantCell = point;
                         }
