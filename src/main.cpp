@@ -35,9 +35,9 @@ int main(){
 
     // Design MPC - Compute controller gains for the horizon
     int N = 100;
-    float Qth = 0.04;
-    float Qdu = 0.0005;
-    float Qu =  0.0008;
+    float Qth = 0.1;
+    float Qdu = 0.001;
+    float Qu =  0.001;
     pf.initMPC(N);
     pf.design(Qth, Qdu, Qu);
 
@@ -212,7 +212,7 @@ int main(){
 
 	    // This following needs only to be done when a new route should be planned
         gridMap.transform();	// Dialate Map and Compute Distance Transform
-        Point wayPointCell = gridMap.determineNextWaypointCell(&laserScanner,3.0f);
+        Point wayPointCell = gridMap.determineNextWaypointCellB(&laserScanner,3.5f);
         // Point wayPointCell = gridMap.worldToCell(3.5,-4);
         // Vector2f wayPoint = map.determineNextWaypoint(&laserScanner);
         // cout << "wayPointCell = " << wayPointCell << endl;

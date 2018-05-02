@@ -732,6 +732,84 @@ public:
         return cellToWorld(determineNextWaypointCell(scan));
     }
 
+        /** Determine next waypoint defined as the furthest point seen by the laserscanner which is
+    not occupied in the dialated obstacle map. The search has a preference for scanlines with small angles, which is achieved by 
+    iterating from the middle and out and only replacing if a longer distance is found. Thus, small angles are only used in case of ties.*/
+    Point determineNextWaypointCellB(LaserScanner *scan, float maxLSDist=1e4){
+        float biggestDistanceInCells = 0;
+        Point mostDistantCell;
+        int nScanLinesHalf = scan->nScanLines/2;
+        
+        // Convert polar scan coordinates to laser cartesian coordinates
+        MatrixXd scanPolar = scan->getScanPolar();
+        
+        // Limit the range of the scan
+        if(maxLSDist < 1e3){
+            for(int i=0; i<scanPolar.cols(); i++){
+                double& rho = scanPolar(1,i);
+                if(rho > maxLSDist) rho = maxLSDist;
+            }
+        }
+        // Convert laser cartesian coordinates to world cartesian coordinates
+        MatrixXd scanWorld = scan->polarToWorld(scanPolar);
+
+        // Convert scan from world cartesian coordinates to cell position
+        for(int i=0; i<=nScanLinesHalf; i++){
+            int k;
+            for(int j=0; j<2; j++){
+                if(j==0)   k = nScanLinesHalf-i;
+                else       k = nScanLinesHalf+i;
+                if(k >= 0 && k < scan->nScanLines){
+                    double& rho = scanPolar(1,k);
+                    double& xs  = scanWorld(0,k);
+                    double& ys  = scanWorld(1,k);
+                    // float& phi = scanPolar(0,k);
+
+                    if(rho <= biggestDistanceInCells*cellSize) continue;
+                    Point cell = worldToCell(xs, ys);
+                    // int obstdist = distanceMapAt(cell.x,cell.y);
+
+                    // Clear search for furthest available point using Bresenham's algorithm
+                    Point closestOccupiedPoint;
+                    vector<Point> points = bresenhamPoints(scanPosCell.x, scanPosCell.y, cell.x, cell.y);
+                    if(scanPosCell != points[0]) reverse(points.begin(), points.end());
+                    
+                    #if (0)
+                    cout << "Scan:(" << scanPosCell.x << "," << scanPosCell.y << ")";
+                    for(int p=0; p<points.size(); p++){
+                    	cout << "->(" << points[p].x << "," << points[p].y << ")";
+                    }
+                    cout << endl;
+					#endif
+
+                    // cout << "Diff:" <<scanPosCell-cell << endl;
+                    uint ii=0;
+                    while(ii<points.size()){
+                        Point point = points[ii];
+                        if(dialatedMapAt(point.x,point.y) != 0) break;
+                        float dx = point.x - scanPosCell.x;
+                        float dy = point.y - scanPosCell.y;
+                        float celldist = sqrt(dx*dx+dy*dy);
+                        if(celldist > biggestDistanceInCells && dialatedMapAt(point.x,point.y) == 0){
+                            biggestDistanceInCells = celldist;
+                            mostDistantCell = point;
+                        }
+                        ii++;
+                    }
+                }
+            }
+        }
+  
+        return mostDistantCell;
+    }
+
+    /** Determine next waypoint defined as the furthest point seen by the laserscanner, 
+    not occupied in the dialated map, with preference for scanlines with small angles, achieved by 
+    iterating from the middle and out and only replacing if a longer distance is found. */
+    inline Point2f determineNextWaypointB(LaserScanner *scan, float maxLSDist=1e8){
+        return cellToWorld(determineNextWaypointCellB(scan));
+    }
+
     /** This function will find the minimal cost path from the starting cell to the target cell. 
     The function uses the A* search algorithm with tie-breaker and an additional cost related to 
     the obstacle distance. */
