@@ -7,7 +7,7 @@
 
 //#include <iostream>
 //#include <Eigen/Dense>
-// #define USE_CV_DISTANCE_TRANSFORM
+#define USE_CV_DISTANCE_TRANSFORM
 
 #include "GridMap.hpp"
 #include "RobotMPC.h"
@@ -165,15 +165,17 @@ int main(){
 
 
 	// Create OpenCV Windows
-    namedWindow( "Path", WINDOW_AUTOSIZE );
-    moveWindow("Path", 0,0);
+    namedWindow( "Map", WINDOW_AUTOSIZE );
+    moveWindow("Map", 0,0);
+    namedWindow( "DiatanceMap", WINDOW_AUTOSIZE );
+    moveWindow("DiatanceMap", gridMap.width*4,0);
 
     Vector3f pose; pose << 0, 0, 0;
     vector<Vector3f> postHist;
     //pose << 1.53779,-2.33605,-0.0965727;
     Vector3f scanPoseR; scanPoseR << 0.255, 0, 0;
 
-    int nstp=2400;
+    int nstp=2200;
     float time=0;
 
     gridMap.astar.unknownAsObstacle = true;
@@ -212,6 +214,7 @@ int main(){
 
 	    // This following needs only to be done when a new route should be planned
         gridMap.transform();	// Dialate Map and Compute Distance Transform
+        Mat dMap = gridMap.distanceMap;
         Point wayPointCell = gridMap.determineNextWaypointCellB(&laserScanner,3.5f);
         // Point wayPointCell = gridMap.worldToCell(3.5,-4);
         // Vector2f wayPoint = map.determineNextWaypoint(&laserScanner);
@@ -247,8 +250,11 @@ int main(){
             gridMap.astar.drawPath(mapToDraw);
             gridMap.astar.drawNodes(mapToDraw, newpath);
 
-            resize(mapToDraw, mapToDraw, Size(gridMap.height*3, gridMap.width*3), 0, 0, INTER_NEAREST);                    
-            imshow( "Path", mapToDraw);
+            resize(mapToDraw, mapToDraw, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
+            imshow( "Map", mapToDraw);
+            resize(dMap, dMap, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
+            imshow( "DiatanceMap", dMap*10.0);
+
             waitKey(1);
         }
 
