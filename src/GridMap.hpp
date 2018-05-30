@@ -25,7 +25,7 @@ using namespace cv;
 
 /*
 #ifndef USE_CV_DISTANCE_TRANSFORM
-#define USE_CV_DISTANCE_TRANSFORM
+%define USE_CV_DISTANCE_TRANSFORM
 #endif
 */
 
@@ -661,7 +661,8 @@ public:
         
         #ifdef USE_CV_DISTANCE_TRANSFORM
         bitwise_not(dialatedMap, invDialatedMap);
-        distanceTransform(invDialatedMap, distanceMap_32F, CV_DIST_L2, 5, CV_32F);
+        //distanceTransform(invDialatedMap, distanceMap_32F, CV_DIST_L2, 5, CV_32F);
+        distanceTransform(invDialatedMap, distanceMap_32F, CV_DIST_C, 5, CV_32F);
         distanceMap_32F.convertTo(distanceMap,dialatedMap.type());        
         #endif
    }
@@ -816,17 +817,17 @@ public:
     vector<MapNode *> findpath(int const& xStart, int const& yStart, int const& xTarget, int const& yTarget, unsigned long const& maxIter = 10000){
         // vector<MapNode *> path;
         astar.clear();
-        for (int y = 0; y < mapData.rows; y++) {
-            for (int x = 0; x < mapData.cols; x++) {
+        for (uint y = 0; y < mapData.rows; y++) {
+            for (uint x = 0; x < mapData.cols; x++) {
                 MapNode *node = astar.mapAt(x,y);
                 if(dialatedMapAt(x,y) > 0) node->type = NODE_TYPE_OBSTACLE;
                 else if(mapAt(x,y) == -1)  node->type = NODE_TYPE_UNKNOWN;
                 else node->type = NODE_TYPE_ZERO;
 
                 #ifdef USE_CV_DISTANCE_TRANSFORM
-                node->obstdist = distanceMapAt(x,y);
+                    node->obstdist = distanceMapAt(x,y);
                 #else
-                node->obstdist = -1;
+                    node->obstdist = -1; // -1 means that the distance is still unknown, and thus it will be calculated by astar during node expansion.
                 #endif
             }
         }

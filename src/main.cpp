@@ -1,5 +1,5 @@
 
-
+#include <fstream>
 #include <opencv2/core.hpp>
 //#include <opencv2/imgproc.hpp>
 //#include <opencv2/imgcodecs.hpp>
@@ -25,9 +25,37 @@ RobotPathFollowMPC pf = RobotPathFollowMPC();
 
 // Mat mapToPlot;
 Mat mapToDraw;
-
+Mat mapDiaToDraw;
+Mat mapDiaDistToDraw;
+Mat mapDiaDistPathToDraw;
 void drawPoseHist(Mat &mapToDraw, vector<Vector3f> poseHist){
 }
+
+
+/** Drawing is enabled if ASTAR_USE_OPENCV is defined */
+void drawMap(Mat &mapToDraw, GridMap & map, int mode=1) {
+    int nx = map.dialatedMap.cols;
+    int ny = map.dialatedMap.rows;
+    MapNode*node;
+    for (uint x = 0; x<nx; x++) {
+        for (uint y = 0; y<ny; y++) {
+            node = map.astar.mapAt(x,y);
+            if(map.mapData.at<char>(y,x) > 0 && (mode == 1 || mode == 4)) mapToDraw.at<Vec3b>(y,x) = cv::Vec3b(255, 255, 255);
+            else if(map.dialatedMap.at<uchar>(y,x) > 0 && (mode == 2 || mode == 3)) mapToDraw.at<Vec3b>(y,x) = cv::Vec3b(255, 255, 255);
+            else if(map.dialatedMap.at<uchar>(y,x) > 0 && mode == 4) mapToDraw.at<Vec3b>(y,x) = cv::Vec3b(180, 180, 180);
+            else if(map.mapData.at<char>(y,x) < 0)      mapToDraw.at<Vec3b>(y,x) = cv::Vec3b(0, 0, 0);
+            else if(node->obstdist > 0 && mode == 3)    mapToDraw.at<Vec3b>(y, x) = cv::Vec3b(127, min(127+10*node->obstdist,255), min(127+10*node->obstdist,255));     
+            else mapToDraw.at<Vec3b>(y,x) = cv::Vec3b(127, 127, 127);
+        }
+    }
+}
+
+void drawRobotArrow(Mat &mapToDraw) {
+    Point robotCell = gridMap.worldToCell(pf.pose(0),pf.pose(1));
+    Point scanCell  = gridMap.worldToCell(laserScanner.pose(0),laserScanner.pose(1));
+    arrowedLine(mapToDraw, robotCell, scanCell, Scalar(255,0,0), 1,8,0,0.5);
+}
+
 
 
 
@@ -50,8 +78,8 @@ int main(){
 
     // GridMap Stuff!!
     cout << "Hello Dude!" << endl;
-    float w = 10;
-    float h = 10;
+    float w = 6;
+    float h = 6;
     float robotWidth = 0.3;
 
 
@@ -72,8 +100,7 @@ int main(){
     */
 
     // Walls
-    /*
-    MatrixXf lines(4,36);
+    MatrixXd lines(4,36);
     lines.col(0) << 0,    0.25, 3.5,    0.25;
     lines.col(1) << 0,   -0.25,   3,   -0.25;
     lines.col(2) << 3.5,  0.25, 3.5,   -2;
@@ -114,7 +141,7 @@ int main(){
     lines.col(34) << 2.9, -2.8,  2.8, -3.1;
     lines.col(35) << 2.8, -3.1,  2.4, -2.8;
 
-    */
+    /*
 
     MatrixXd lines(4,31);
     lines.col(0) << 0,    0.5,  8,      0.5;
@@ -150,33 +177,42 @@ int main(){
     lines.col(29) << 8,   -2.5,  8,      -4;
     lines.col(30) << 7,   -3,    7,      -4;
     
+    
+    MatrixXd lines(4,8);
+    lines.col(0) << 0 , 1, 4,  1;
+    lines.col(1) << 0, -2, 1, -2;
+    lines.col(2) << 2, -2, 4, -2;
+    lines.col(3) << 2, -2, 2, -4;
+    lines.col(4) << 1, -2, 1, -6;
+    lines.col(5) << 1, -6, 4, -6;
+    lines.col(6) << 2, -4, 4, -4;
+    lines.col(7) << 2, -4, 4, -4;
+    */
+    
     cout << "lines:\n" << lines << endl;
 
     // Setup the map
     gridMap.resize(w,h,cellSize);
     cout << "Map:  H:" << gridMap.heightInMeters() << "m W:" << gridMap.widthInMeters() << "m with cellSize:" << gridMap.cellSize << "m^2 ---> H:" << gridMap.height << " W:" << gridMap.width << " Size:" << gridMap.size  << endl;
-    gridMap.setOffset(0,5);
-
+    gridMap.setOffset(1,5.5);
 
     // Make structuring element for map dialation - based on robot width, or 2*radius, or som safety margin
-
-
     gridMap.makeStrel(robotWidth);
-
 
 	// Create OpenCV Windows
     namedWindow( "Map", WINDOW_AUTOSIZE );
     moveWindow("Map", 0,0);
-    namedWindow( "DiatanceMap", WINDOW_AUTOSIZE );
-    moveWindow("DiatanceMap", gridMap.width*4,0);
+    namedWindow( "DialatedMap", WINDOW_AUTOSIZE );
+    moveWindow("DialatedMap", gridMap.width*4,0);
 
     Vector3f pose; pose << 0, 0, 0;
     vector<Vector3f> postHist;
     //pose << 1.53779,-2.33605,-0.0965727;
     Vector3f scanPoseR; scanPoseR << 0.255, 0, 0;
 
-    int nstp=2200;
+    int nstp=800;
     float time=0;
+    pf.simData.resize(nstp,13);
 
     gridMap.astar.unknownAsObstacle = true;
 
@@ -198,7 +234,7 @@ int main(){
             x + cs*scanPoseR(0) - sn*scanPoseR(1),
             y + cs*scanPoseR(1) + sn*scanPoseR(0),
             th+scanPoseR(2));
-
+        cout << "pose: (" << x << "," << y << "," << th << ")" << endl; 
         cout << "scanpose: (" << laserScanner.pose(0) << "," << laserScanner.pose(1) << "," << laserScanner.pose(2) << ")" << endl;    
         
         // Simumate a scan
@@ -243,17 +279,35 @@ int main(){
         if(ii % 10 == 0 && newPathFound){
             mapToDraw = (gridMap.mapData+1);
             mapToDraw.convertTo(mapToDraw,CV_8UC3);
-            mapToDraw *= 127;
-            mapToDraw += gridMap.dialatedMap * 0.15;
-            
+            //mapToDraw *= 127;
+           	//mapToDraw += gridMap.dialatedMap * 0.15;
+
             cvtColor(mapToDraw, mapToDraw, COLOR_GRAY2BGR);
-            gridMap.astar.drawPath(mapToDraw);
-            gridMap.astar.drawNodes(mapToDraw, newpath);
+            mapDiaToDraw = mapToDraw.clone();
+            mapDiaDistToDraw = mapToDraw.clone();
+            drawMap(mapToDraw,gridMap,1);
+            drawRobotArrow(mapToDraw);
+
+            drawMap(mapDiaToDraw,gridMap,2);
+            drawRobotArrow(mapDiaToDraw);
+
+            drawMap(mapDiaDistToDraw,gridMap,3);
+            drawRobotArrow(mapDiaDistToDraw);
+
+            mapDiaDistPathToDraw = mapDiaDistToDraw.clone();
+            gridMap.astar.drawPath(mapDiaDistPathToDraw,false);
+            drawRobotArrow(mapDiaDistPathToDraw);
+            // gridMap.astar.drawNodes(mapDiaDistPathToDraw, newpath);
 
             resize(mapToDraw, mapToDraw, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
-            imshow( "Map", mapToDraw);
+            resize(mapDiaToDraw, mapDiaToDraw, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
+            resize(mapDiaDistToDraw, mapDiaDistToDraw, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
+            resize(mapDiaDistPathToDraw, mapDiaDistPathToDraw, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
+
             resize(dMap, dMap, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
-            imshow( "DiatanceMap", dMap*10.0);
+
+            imshow( "Map", mapToDraw);
+            imshow( "DialatedMap", mapDiaToDraw);
 
             waitKey(1);
         }
@@ -268,9 +322,20 @@ int main(){
         // Robot Simulation
         pose = pf.kinupdate(pose, pf.uw, pf.T);
         time += pf.T;
+        pf.logData(ii,time);
 
 	}
+    cout << "SimulationData:\n" << pf.simData << endl;
     cout << "Number of steps in simulation = " << nstp << endl;
+    ofstream file("simData.txt");  
+    if (file.is_open()){
+      file << pf.simData << '\n';
+      file.close();
+    }
+    imwrite( "mapToDraw.jpg", mapToDraw );
+    imwrite( "mapDiaToDraw.jpg", mapDiaToDraw );
+    imwrite( "mapDiaDistToDraw.jpg", mapDiaDistToDraw );
+    imwrite( "mapDiaDistPathToDraw.jpg", mapDiaDistPathToDraw );
 
 	waitKey(0);
 	
