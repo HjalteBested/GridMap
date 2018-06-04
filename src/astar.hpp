@@ -31,7 +31,7 @@ const int NODE_TYPE_END = 3;
 
 const bool DEBUG = false;			// Zero means it is disabled completely
 
-
+/** Astar Data Structure that maintains the size of a grid-map */
 class MapSize {
 public:
     unsigned long width = 0;
@@ -46,19 +46,29 @@ public:
     }
 };
 
+/** Astar Data Structure representing a graph node */
 class MapNode {
 public:
-    int x = -1;	// x-position
-    int y = -1; // y-position
-    uint h = 0;	// Heuristic cost
-    uint g = 0;  // Cost from start to node
-    int obstdist = -1;	// Terrain cost
+	/** The x location of the node */
+    int x = -1;	
+    /** The y location of the node */
+    int y = -1;
+    /** Heuristic cost */
+    uint h = 0;
+    /** Cost from start to node  */
+    uint g = 0; 
+    /** Distance to closest obstacle */
+    int obstdist = -1;	
+    /** Node type: -1:NODE_TYPE_UNKNOWN, 0: NODE_TYPE_ZERO, 1: NODE_TYPE_OBSTACLE, 2: NODE_TYPE_START, 3:NODE_TYPE_END */
     int type = NODE_TYPE_ZERO;
+    /** Node flag: -1: NODE_FLAG_CLOSED, 0:NODE_FLAG_UNDEFINED, 1:NODE_FLAG_OPEN */
     int flag = NODE_FLAG_UNDEFINED;
+    /** Pointer to the parent node - used for reconstructing the path */
     MapNode *parent = NULL;
 
+    /** Construct an unitialized instance */
     MapNode() { }
-
+    /** Construct an itialized instance */
     MapNode(int x, int y, int type = NODE_TYPE_ZERO, int obstdist = -1, int flag = NODE_FLAG_UNDEFINED, MapNode *parent = NULL){
         this->x = x;
         this->y = y;
@@ -68,10 +78,12 @@ public:
         this->parent = parent;
     }
 
+    /** Compute f(n) = g(n)+h(n) */
     int f(){
         return g + h;
     }
 
+    /** Clear the node */
     inline void clear(int type=NODE_TYPE_ZERO){
     	this->h = 0;
     	this->g = 0;
@@ -81,43 +93,48 @@ public:
     	this->parent = NULL;
     }
 
+    /** Print the node */
     void print(){
     	cout << "MapNode(x=" << x << ",y=" << y << ",type=" << type << ",obstdist=" << obstdist << ",flag=" << flag << ",parent=" << parent << ")" << endl;
     }
 };
 
+/** Implementation of A* pathfinding algorithm for grid-maps, featured with tie-breaker and obstacle repulsive potential options */
 class Astar {
 public:
+	int G_DIRECT_COST   = 1000; //!< Cost of moving to a direct neighbor cell 
+	int G_DIAGONAL_COST = 1414;	//!< Cost of moving to a diagonal neighbor cell, i.e. ≈ G_DIRECT_COST * sqrt(2);
+	int G_UNKNOWN_COST  = 0;	//!< Cost of moving to an unknown neighbor cell
+    int H_AMITGAIN = 0;			//!< Gain for the tie-breaker. Zero means it is disabled completely.
+	int G_OBST_COST = 1000;		//!< The obstacle distance cost is: G_OBST_COST/obstdist.
+	int G_OBST_THRESH = 12;		//!< Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
+    bool ALLOW_DIAGONAL_PASSTHROUGH = true; //!< Is diagonal passthrough allowed
+	bool unknownAsObstacle = false; //!< If true: Treat unknown area as obstacle, else: Treat unknown area as free
+	float krep = 20.0; //!< Scaling factor for the obstacle repulsive potential
+	float p=1.5; //!< Parameter for controlling the slope of the obstacle repulsive potantial
 
-	int G_DIRECT_COST   = 1000; /// Cost of moving to a direct neighbor cell 
-	int G_DIAGONAL_COST = 1414;	/// Cost of moving to a diagonal neighbor cell, i.e. ≈ G_DIRECT_COST * sqrt(2);
-	int G_UNKNOWN_COST  = 0;	/// Cost of moving to an unknown neighbor cell
-    int H_AMITGAIN = 0;			/// Gain for the tie-breaker. Zero means it is disabled completely.
-	int G_OBST_COST = 1000;		/// The obstacle distance cost is: G_OBST_COST/obstdist.
-	int G_OBST_THRESH = 12;		/// Obstacel distance cost is only active when: obstdist < G_OBST_THRESH
-    bool ALLOW_DIAGONAL_PASSTHROUGH = true;
-	bool unknownAsObstacle = false;
-	float krep = 20.0;
-	float p=1.5;
+	MapSize mapSize;				//!< Class for storing the size of the Map
+	vector<MapNode> mapData;		//!< The actual map data
+	vector<MapNode *> openList; 	//!< The list of open nodes (the frontier)
+	vector<MapNode *> closedList; 	//!< The closedList is not really needed for the algorithm to run, but is handy for visualising which nodes was examined in the path determination
+	vector<MapNode *> path;			//!< The resulting path
 
-	MapSize mapSize;				/// Class for storing the size of the Map
-	vector<MapNode> mapData;		/// The actual map data
-	vector<MapNode *> openList; 	
-	vector<MapNode *> closedList; 	/// The closedList is not really needed for the algorithm to run, but is handy for visualising which nodes was examined in the path determination
-	vector<MapNode *> path;
+	MapNode *startNode=NULL;		//!< Pointer to the start node
+	MapNode *targetNode=NULL;		//!< Pointer to the goal node
+	bool wrapMap = false;			//!< If wrapMap = true, the map can wrap around the edges such that the map can be used locally
 
-	MapNode *startNode=NULL;
-	MapNode *targetNode=NULL;
-	bool wrapMap = false;
-    bool reachedTarget=false;
-	vector<MapNode *> neighborNodes;
+    bool reachedTarget=false;		//!< Did the search ever reach the target ?
+	vector<MapNode *> neighborNodes; //!< Preallocated storage for the neighbors of the current node
 
+	/** Construct uninitialized instance */
 	Astar() { }
 
+	/** Construct initialized instance */
     Astar(unsigned long width, unsigned long height) {
         this->resize(width,height);
     }
 
+    /** Resize the internal map and all the related data structures */
     void resize(unsigned long width, unsigned long height){
         this->mapSize = MapSize(width,height);
         this->mapData.resize(mapSize.size);
@@ -134,7 +151,7 @@ public:
         if(DEBUG) cout << "MapSize(" << mapSize.width << ", " << mapSize.height << ", " << mapSize.size << ")" << endl;
     }
 
-	/**	The standard heuristic is the Manhattan distance. 
+	/**	The standard heuristic is the Manhattan distance: 
 	 *	Look at your cost function and see what the least cost is 
 	 *	for moving from one space to another. 
 	 *	The heuristic should be cost times manhattan distance: */
@@ -178,14 +195,13 @@ public:
 	}
 
 
-	/** Compute the cost from startnode (node1) to current node (node2). */
+	/** Compute the obstacle repulsive potential Urep for a given node */
 	inline float computeUrep(MapNode *node) {
 		if(node->obstdist <= 0 || node->obstdist >= G_OBST_THRESH || krep <= 0) return 0.0f;
 		return  krep * pow((1.0f/node->obstdist - 1.0f/G_OBST_THRESH),p);
 	}
 
-	/** Compute the heuristic cost, or the estimated cost from 
-	*	current node (node1) to goal node (node2). */
+	/** Compute the heuristic cost, or the estimated cost from current node (node1) to goal node (node2). */
 	inline int computeH(MapNode *node1, MapNode *node2){
 	    if (ALLOW_DIAGONAL_PASSTHROUGH) {
 	        return diagonal_distance(node1, node2) * G_DIAGONAL_COST;
@@ -194,7 +210,7 @@ public:
 	    }
 	}
 
-	/** Compute the cost from startnode (node1) to current node (node2). */
+	/** Compute the cost of going from node1 to node2 */
 	inline int computeG(MapNode *node1, MapNode *node2) {
 		int cost = 0;
 	    if(node1->x != node2->x && node1->y != node2->y) 
@@ -226,6 +242,7 @@ public:
 	    targetNode = NULL;
 	}
 
+	/** Clear all Nodes , empty the lists, set startNode=NULL and targetNode = NULL */	
 	void clearAll(){
 		for(int y=0; y<mapSize.height; y++){
             for(int x=0; x<mapSize.width; x++){
@@ -314,11 +331,11 @@ public:
 	    while (openList.size() > 0) {
 	        node = openList.at(0);
 
+	        // Should be changed to a PriorityQueue !!
 	        for (int i=0; i<openList.size(); i++){
 	        	if (openList[i]->f() <= node->f()){
 	                node = openList[i];
 	            } 
-  
 	        }
 	        openList.erase(remove(openList.begin(), openList.end(), node), openList.end());
 	        node->flag = NODE_FLAG_CLOSED;
@@ -380,7 +397,7 @@ public:
 	            path.push_back(_node);
 	            _node = _node->parent;
 	        }
-	        path.push_back(startNode);
+	        path.push_back(startNode); // optional
 	        reverse(path.begin(), path.end());
 	    }
 	    return path;
@@ -475,7 +492,7 @@ public:
 	    return available;
 	}
 
-	//** Find all the neighbors to the node and return a vector of MapNode pointers */
+	/** Compute the diagonal distance from node n to the nearest obstacle */
 	uint computeObstDist(MapNode *node){
 	    MapNode *_node;
 		uint dist = 1; 		
@@ -525,6 +542,7 @@ public:
 	    return node;
 	}
 	
+	/** Construct a vector with all nodes that are an edge of an obstacle */
 	vector<MapNode *> obstacelEdgeNodes(){
 		vector<MapNode *> obstnodes;
 		// Find all obstacle nodes:

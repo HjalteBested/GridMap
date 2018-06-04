@@ -97,7 +97,7 @@ int main(){
 	lines.col(3) << 3,  -0.25, 3,   -1;
     lines.col(4) << 24,  3, 24,   -3;
 	cout << "lines:\n" << lines << endl;
-    */
+    
 
     // Walls
     MatrixXd lines(4,36);
@@ -122,8 +122,8 @@ int main(){
     lines.col(18) << 2.8,-3.55,   3,   -3.55;
     lines.col(19) << 2,     -4,   3,   -4;
     lines.col(20) << 0,     -4, 1.5,   -4;
-    lines.col(21) << 1.5,   -4, 1.5,   -6;
-    lines.col(22) << 2,     -4,   2,   -6;
+    lines.col(21) << 1.5,   -4, 1.5,   -5;
+    lines.col(22) << 2,     -4,   2,   -5;
     lines.col(23) << 1,  -3.55,   1,   -4;
     lines.col(24) << 3,  -3.55,   3,   -4;
     // Obstacle1
@@ -141,7 +141,7 @@ int main(){
     lines.col(34) << 2.9, -2.8,  2.8, -3.1;
     lines.col(35) << 2.8, -3.1,  2.4, -2.8;
 
-    /*
+    
 
     MatrixXd lines(4,31);
     lines.col(0) << 0,    0.5,  8,      0.5;
@@ -188,17 +188,40 @@ int main(){
     lines.col(6) << 2, -4, 4, -4;
     lines.col(7) << 2, -4, 4, -4;
     */
+
+    MatrixXd lines(4,19);
+    lines.col(0)  << 1,   -0.5,  1,    0.2;
+    lines.col(1)  << 0.8, -0.5,  0.8,  0.2;
+    lines.col(2)  << 0.8, -0.5,  1.0, -0.5;
+    lines.col(3)  << 0.8,  0.2,  1.0,  0.2;
+    lines.col(4)  << 1.5,  0.5,  1.5,  0.1;
+    lines.col(5)  << 1.6,  0.5,  1.6,  0.1;
+    lines.col(6)  << 1.5,  0.5,  1.6,  0.5;
+    lines.col(7)  << 1.5,  0.1,  1.6,  0.1;
+    lines.col(8)  << 2.4, -0.2,  2.4,  0.2;
+    lines.col(9)  << 2.9, -0.2,  2.7,  0.2;
+    lines.col(10) << 2.9, -0.2,  2.4, -0.2;
+    lines.col(11) << 2.4,  0.2,  2.7,  0.2;
+    lines.col(12) << 1.6, -0.8,  1.9, -0.25;
+    lines.col(13) << 1.9, -0.25, 2.0, -0.8;
+    lines.col(14) << 2.0, -0.8,  1.9, -1.1;
+    lines.col(15) << 1.9, -1.1,  1.6, -0.8;
+    lines.col(16) << 1.9, -1.1,  1.6, -0.8;
+    lines.col(17) << -1,    0.6,  4,    0.6;
+    lines.col(18) << -1,   -1.3,  4,   -1.3;
+
+    
     
     cout << "lines:\n" << lines << endl;
 
     // Setup the map
     gridMap.resize(w,h,cellSize);
     cout << "Map:  H:" << gridMap.heightInMeters() << "m W:" << gridMap.widthInMeters() << "m with cellSize:" << gridMap.cellSize << "m^2 ---> H:" << gridMap.height << " W:" << gridMap.width << " Size:" << gridMap.size  << endl;
-    gridMap.setOffset(1,5.5);
-
+    gridMap.setOffset(1,3);
+    gridMap.setWrapMap(false);
     // Make structuring element for map dialation - based on robot width, or 2*radius, or som safety margin
     gridMap.makeStrel(robotWidth);
-
+    gridMap.astar.G_UNKNOWN_COST = 1000;
 	// Create OpenCV Windows
     namedWindow( "Map", WINDOW_AUTOSIZE );
     moveWindow("Map", 0,0);
@@ -210,11 +233,12 @@ int main(){
     //pose << 1.53779,-2.33605,-0.0965727;
     Vector3f scanPoseR; scanPoseR << 0.255, 0, 0;
 
-    int nstp=800;
+    int nstp=530;
+
     float time=0;
     pf.simData.resize(nstp,13);
 
-    gridMap.astar.unknownAsObstacle = true;
+    gridMap.astar.unknownAsObstacle = false;
 
     // Simulation
     for(int ii=0; ii<nstp; ii++){
@@ -252,6 +276,7 @@ int main(){
         gridMap.transform();	// Dialate Map and Compute Distance Transform
         Mat dMap = gridMap.distanceMap;
         Point wayPointCell = gridMap.determineNextWaypointCellB(&laserScanner,3.5f);
+        wayPointCell = gridMap.worldToCell(4,0);
         // Point wayPointCell = gridMap.worldToCell(3.5,-4);
         // Vector2f wayPoint = map.determineNextWaypoint(&laserScanner);
         // cout << "wayPointCell = " << wayPointCell << endl;
@@ -307,7 +332,7 @@ int main(){
             resize(dMap, dMap, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
 
             imshow( "Map", mapToDraw);
-            imshow( "DialatedMap", mapDiaToDraw);
+            imshow( "DialatedMap", mapDiaDistPathToDraw);
 
             waitKey(1);
         }
