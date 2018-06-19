@@ -140,7 +140,8 @@ int main(){
     lines.col(33) << 2.7, -2.6, 2.9, -2.8;
     lines.col(34) << 2.9, -2.8,  2.8, -3.1;
     lines.col(35) << 2.8, -3.1,  2.4, -2.8;
-
+    
+    
     
 
     MatrixXd lines(4,31);
@@ -188,7 +189,7 @@ int main(){
     lines.col(6) << 2, -4, 4, -4;
     lines.col(7) << 2, -4, 4, -4;
     */
-
+    
     MatrixXd lines(4,19);
     lines.col(0)  << 1,   -0.5,  1,    0.2;
     lines.col(1)  << 0.8, -0.5,  0.8,  0.2;
@@ -209,7 +210,7 @@ int main(){
     lines.col(16) << 1.9, -1.1,  1.6, -0.8;
     lines.col(17) << -1,    0.6,  4,    0.6;
     lines.col(18) << -1,   -1.3,  4,   -1.3;
-
+    
     
     
     cout << "lines:\n" << lines << endl;
@@ -217,7 +218,7 @@ int main(){
     // Setup the map
     gridMap.resize(w,h,cellSize);
     cout << "Map:  H:" << gridMap.heightInMeters() << "m W:" << gridMap.widthInMeters() << "m with cellSize:" << gridMap.cellSize << "m^2 ---> H:" << gridMap.height << " W:" << gridMap.width << " Size:" << gridMap.size  << endl;
-    gridMap.setOffset(1,3);
+    gridMap.setOffset(1,5);
     gridMap.setWrapMap(false);
     // Make structuring element for map dialation - based on robot width, or 2*radius, or som safety margin
     gridMap.makeStrel(robotWidth);

@@ -34,9 +34,9 @@ const bool DEBUG = false;			// Zero means it is disabled completely
 /** Astar Data Structure that maintains the size of a grid-map */
 class MapSize {
 public:
-    unsigned long width = 0;
-    unsigned long height = 0;
-    unsigned long size = 0;
+    unsigned long width = 0;	//!< The width of the map in cells
+    unsigned long height = 0;	//!< The height of the map in cells
+    unsigned long size = 0;		//!< The size of the map in cells: size = width * height
 
     MapSize() { }
     MapSize(unsigned long width, unsigned long height) {
@@ -57,7 +57,7 @@ public:
     uint h = 0;
     /** Cost from start to node  */
     uint g = 0; 
-    /** Distance to closest obstacle */
+    /** Distance to closest obstacle - if the value is -1 during node expansion, the obstacle distance is calculated locally */
     int obstdist = -1;	
     /** Node type: -1:NODE_TYPE_UNKNOWN, 0: NODE_TYPE_ZERO, 1: NODE_TYPE_OBSTACLE, 2: NODE_TYPE_START, 3:NODE_TYPE_END */
     int type = NODE_TYPE_ZERO;
@@ -78,7 +78,7 @@ public:
         this->parent = parent;
     }
 
-    /** Compute f(n) = g(n)+h(n) */
+    /** Compute the total cost estimate: f(n) = g(n)+h(n) */
     int f(){
         return g + h;
     }
