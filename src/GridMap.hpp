@@ -322,12 +322,15 @@ public:
     Mat dialatedMap;
     /** OpenCV Structuring Element used for map dilation.  */
     Mat strel;
+
+    #ifdef USE_CV_DISTANCE_TRANSFORM
     /** The inverse of the dialated map, used for distance transform */
     Mat invDialatedMap;
     /** The distance transformed map as a 32bit float */
     Mat distanceMap_32F;
     /** The distance transformed map as char */
     Mat distanceMap;
+    #endif
 
     /** If wrapMap = true, the map can wrap around the edges such that the map can be used locally */
     bool wrapMap = true;
@@ -372,9 +375,11 @@ public:
         this->setOffset(widthInMeters/2.0,heightInMeters/2.0);
         mapData.create(height,width,CV_8SC1);
         dialatedMap.create(height,width,CV_8SC1);
+        #ifdef USE_CV_DISTANCE_TRANSFORM
         invDialatedMap.create(height,width,CV_8SC1);
         distanceMap_32F.create(height,width,CV_32F);
         distanceMap.create(height,width,CV_8SC1);
+        #endif 
         astar.resize(height, width);
         astar.wrapMap = wrapMap;
         this->clear();
@@ -384,7 +389,9 @@ public:
     void clear(){
         mapData.setTo(-1);
         dialatedMap.setTo(0);
+        #ifdef USE_CV_DISTANCE_TRANSFORM
         distanceMap.setTo(0);
+        #endif
         astar.clearAll();
     }
     
@@ -637,6 +644,7 @@ public:
     }
 
     /** Return the value of the distance map at coordinate (x,y) */
+    #ifdef USE_CV_DISTANCE_TRANSFORM
     inline uchar distanceMapAt(int x, int y){
         int& rows = mapData.rows;
         int& cols = mapData.cols;
@@ -656,6 +664,7 @@ public:
 
         return 0;
     }
+    #endif
 
     /** Update the map. This should be called whenever new laser scan data is available. */
     void updateMap(LaserScanner *scan, float maxLSDist){
@@ -702,7 +711,6 @@ public:
         
         #ifdef USE_CV_DISTANCE_TRANSFORM
         bitwise_not(dialatedMap, invDialatedMap);
-        //distanceTransform(invDialatedMap, distanceMap_32F, CV_DIST_L2, 5, CV_32F);
         distanceTransform(invDialatedMap, distanceMap_32F, CV_DIST_C, 5, CV_32F);
         distanceMap_32F.convertTo(distanceMap,dialatedMap.type());        
         #endif

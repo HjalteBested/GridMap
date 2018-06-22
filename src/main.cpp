@@ -1,17 +1,11 @@
 
 #include <fstream>
 #include <opencv2/core.hpp>
-//#include <opencv2/imgproc.hpp>
-//#include <opencv2/imgcodecs.hpp>
-//#include <opencv2/highgui.hpp>
 
-//#include <iostream>
-//#include <Eigen/Dense>
-#define USE_CV_DISTANCE_TRANSFORM
+// #define USE_CV_DISTANCE_TRANSFORM
 
 #include "GridMap.hpp"
 #include "RobotMPC.h"
-// #include <opencv2/imgcodecs/imgcodecs.hpp>
 
 using namespace std;
 using namespace Eigen;
@@ -222,7 +216,7 @@ int main(){
     gridMap.setWrapMap(false);
     // Make structuring element for map dialation - based on robot width, or 2*radius, or som safety margin
     gridMap.makeStrel(robotWidth);
-    gridMap.astar.G_UNKNOWN_COST = 1000;
+    gridMap.astar.unknownCost = 1000;
 	// Create OpenCV Windows
     namedWindow( "Map", WINDOW_AUTOSIZE );
     moveWindow("Map", 0,0);
@@ -275,7 +269,7 @@ int main(){
 
 	    // This following needs only to be done when a new route should be planned
         gridMap.transform();	// Dialate Map and Compute Distance Transform
-        Mat dMap = gridMap.distanceMap;
+        // Mat dMap = gridMap.distanceMap;
         Point wayPointCell = gridMap.determineNextWaypointCellB(&laserScanner,3.5f);
         wayPointCell = gridMap.worldToCell(4,0);
         // Point wayPointCell = gridMap.worldToCell(3.5,-4);
@@ -330,7 +324,7 @@ int main(){
             resize(mapDiaDistToDraw, mapDiaDistToDraw, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
             resize(mapDiaDistPathToDraw, mapDiaDistPathToDraw, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
 
-            resize(dMap, dMap, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
+            // resize(dMap, dMap, Size(gridMap.height*4, gridMap.width*4), 0, 0, INTER_NEAREST);                    
 
             imshow( "Map", mapToDraw);
             imshow( "DialatedMap", mapDiaDistPathToDraw);
